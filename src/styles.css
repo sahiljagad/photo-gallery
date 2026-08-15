@@ -1,0 +1,806 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Sahil Jagad — wildlife and landscape photography
+
+   Field Journal structure at immersive scale: captions sit below their
+   frames rather than over them, but the imagery runs edge to edge and the
+   ground is dark, because most of this work is made at either end of the
+   day and a pale page washes it out.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Reset ─────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Tokens ────────────────────────────────────────────────────────── */
+
+:root {
+  /* Dusk neutral — a near-black with a trace of blue, so it reads as
+     considered next to the greens and ambers in the photographs without
+     casting a tint over them. */
+  --bg: #0b0c0d;
+  --bg-raised: #131517;
+  --fg: #e9eae7;
+  --fg-dim: #9aa09b;
+  --fg-faint: #6b716d;
+  --line: #23272a;
+  --line-strong: #333A3D;
+
+  /* Lichen. Used only for interactive state — links, focus, current page.
+     Never as decoration. */
+  --accent: #9bb08f;
+  --accent-ink: #0b0c0d;
+
+  --scrim: rgba(6, 7, 8, 0.72);
+  --on-image: #fff;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino,
+    'Hoefler Text', Georgia, serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --gut: clamp(1rem, 4vw, 3.5rem);
+  --maxw: 1680px;
+  --measure: 62ch;
+  --t: 0.28s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+[data-theme='light'] {
+  --bg: #edefec;
+  --bg-raised: #f7f8f5;
+  --fg: #14181a;
+  --fg-dim: #5c6462;
+  --fg-faint: #8b918d;
+  --line: #dadfd8;
+  --line-strong: #c3c9c1;
+
+  --accent: #3a5b39;
+  --accent-ink: #f7f8f5;
+
+  --scrim: rgba(10, 12, 10, 0.6);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────── */
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.6;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  display: contents;
+}
+
+main {
+  flex: 1;
+  outline: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 1px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.7rem 1.2rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+/* ── Shared type ───────────────────────────────────────────────────── */
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+/* The field record: date, place, count, gear. Set in mono so the numbers
+   line up and it reads as data rather than prose. */
+.record {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+/* ── Masthead ──────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.6rem var(--gut);
+  position: relative;
+  z-index: 10;
+}
+
+.masthead-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.masthead-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.masthead-nav a {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  padding-bottom: 2px;
+  border-bottom: 1px solid transparent;
+  transition: color var(--t), border-color var(--t);
+}
+
+.masthead-nav a:hover {
+  color: var(--fg);
+}
+
+.masthead-nav a.is-current {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+.theme-toggle {
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--fg-faint);
+  padding: 0.4rem;
+  border-radius: 50%;
+  transition: color var(--t);
+}
+
+.theme-toggle:hover {
+  color: var(--fg);
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────── */
+
+.hero,
+.album-hero {
+  position: relative;
+  width: 100%;
+}
+
+.hero-link {
+  display: block;
+  position: relative;
+}
+
+.hero-frame,
+.album-hero {
+  position: relative;
+  aspect-ratio: 21 / 9;
+  max-height: 80vh;
+  overflow: hidden;
+  background: var(--bg-raised);
+}
+
+.hero-frame img,
+.album-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-frame::after,
+.album-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 45%,
+    var(--scrim) 100%
+  );
+  pointer-events: none;
+}
+
+.hero-caption {
+  position: absolute;
+  left: var(--gut);
+  right: var(--gut);
+  bottom: clamp(1.25rem, 3vw, 2.5rem);
+  z-index: 2;
+  color: var(--on-image);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.hero-caption .eyebrow,
+.hero-caption .record {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 5.5vw, 4rem);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.hero-link:hover .hero-title {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.12em;
+}
+
+/* ── Album index ───────────────────────────────────────────────────── */
+
+.index {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(3rem, 7vw, 5.5rem) var(--gut) clamp(4rem, 8vw, 6rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+/* Two up on anything from a laptop outward. Three columns fits, but shrinks
+   each frame to a size that undersells the work. */
+.index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
+  gap: clamp(2.5rem, 4vw, 3.5rem) clamp(1rem, 2.5vw, 2rem);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.card-frame {
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: var(--bg-raised);
+}
+
+.card-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.card:hover .card-frame img {
+  transform: scale(1.02);
+}
+
+.card-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.3rem;
+  letter-spacing: -0.005em;
+  line-height: 1.2;
+}
+
+.card:hover .card-title {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.12em;
+}
+
+/* ── Album view ────────────────────────────────────────────────────── */
+
+.album-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.album-header {
+  max-width: var(--maxw);
+  width: 100%;
+  margin: 0 auto;
+  padding: clamp(2rem, 5vw, 3.5rem) var(--gut) clamp(1.75rem, 4vw, 2.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.back-link {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  transition: color var(--t);
+  align-self: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.back-link:hover {
+  color: var(--fg);
+}
+
+.album-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.9rem, 4.5vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.album-intro {
+  max-width: var(--measure);
+  color: var(--fg-dim);
+  font-size: 1.02rem;
+  line-height: 1.7;
+  margin-top: 0.75rem;
+}
+
+.album-grid {
+  max-width: var(--maxw);
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--gut) clamp(4rem, 8vw, 6rem);
+}
+
+.album-grid .react-photo-album {
+  cursor: pointer;
+}
+
+.album-grid .react-photo-album--photo {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-raised);
+}
+
+/* Caption on hover — the grid stays quiet; the label lives in the viewer */
+.photo-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 2.5rem 0.8rem 0.65rem;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  opacity: 0;
+  transition: opacity var(--t);
+  pointer-events: none;
+}
+
+.react-photo-album--photo:hover .photo-caption,
+.react-photo-album--photo:focus-within .photo-caption {
+  opacity: 1;
+}
+
+.caption-title {
+  font-weight: 500;
+}
+
+.caption-latin {
+  opacity: 0.85;
+}
+
+.caption-exposure {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── About ─────────────────────────────────────────────────────────── */
+
+.about {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 3rem) var(--gut) clamp(4rem, 8vw, 6rem);
+}
+
+.about-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: clamp(2rem, 5vw, 3.5rem);
+  border-bottom: 1px solid var(--line);
+}
+
+.about-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+}
+
+.about-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(2.5rem, 5vw, 4rem);
+  padding-top: clamp(2rem, 5vw, 3.5rem);
+}
+
+@media (min-width: 900px) {
+  .about-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+    align-items: start;
+  }
+}
+
+.about-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: var(--measure);
+}
+
+.about-text p {
+  color: var(--fg-dim);
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+.about-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.about-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.about-facts dt {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+
+.about-facts dd {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.about-contact,
+.about-prints {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.about-contact ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.about-contact li {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.contact-label {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  min-width: 6rem;
+}
+
+.about-contact a {
+  color: var(--accent);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--t);
+}
+
+.about-contact a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.about-figure {
+  overflow: hidden;
+  background: var(--bg-raised);
+}
+
+.about-figure img {
+  width: 100%;
+  height: auto;
+}
+
+/* ── Lightbox ──────────────────────────────────────────────────────── */
+
+.lightbox-slide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1rem;
+  width: 100%;
+  height: 100%;
+  padding: clamp(1rem, 3vw, 2.5rem) clamp(1rem, 4vw, 3rem);
+}
+
+/* The image takes whatever height the label leaves and fits inside it.
+   `object-fit: contain` on a filled box is what makes this reliable — a
+   percentage max-height on the <img> resolves against a <picture> of
+   indefinite height, so the image overflows and the label lands on top. */
+.lightbox-image {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-image picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.lightbox-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* The exhibition label — everything the metadata can honestly say */
+.shot-label {
+  flex-shrink: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  max-width: 64ch;
+  color: #e9eae7;
+}
+
+.shot-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+
+.shot-latin {
+  color: rgba(233, 234, 231, 0.62);
+}
+
+.shot-line {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(233, 234, 231, 0.62);
+  font-variant-numeric: tabular-nums;
+}
+
+.shot-tech {
+  color: rgba(233, 234, 231, 0.5);
+}
+
+.shot-gear {
+  font-size: 0.64rem;
+  color: rgba(233, 234, 231, 0.36);
+}
+
+.shot-note {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: rgba(233, 234, 231, 0.72);
+  margin-top: 0.35rem;
+}
+
+.yarl__thumbnails_thumbnail {
+  opacity: 0.45;
+  transition: opacity 0.2s;
+}
+
+.yarl__thumbnails_thumbnail_active,
+.yarl__thumbnails_thumbnail:hover {
+  opacity: 1;
+}
+
+.yarl__slide_counter {
+  font-family: var(--font-mono);
+  font-size: 0.66rem !important;
+  letter-spacing: 0.12em;
+  opacity: 0.55;
+}
+
+/* ── Status, footer, empty ─────────────────────────────────────────── */
+
+.status,
+.empty-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 55vh;
+  padding: var(--gut);
+  text-align: center;
+  color: var(--fg-faint);
+}
+
+.status-hint,
+.empty-hint {
+  font-size: 0.86rem;
+}
+
+.status code,
+.empty-hint code {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  padding: 0.15em 0.45em;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.button {
+  margin-top: 0.75rem;
+  padding: 0.55rem 1.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  font-size: 0.72rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  transition: border-color var(--t), color var(--t);
+}
+
+.button:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.site-footer {
+  padding: 2rem var(--gut) 2.5rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  max-width: var(--maxw);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+
+@media (max-width: 700px) {
+  .hero-frame,
+  .album-hero {
+    aspect-ratio: 4 / 3;
+  }
+
+  .masthead {
+    padding: 1.1rem var(--gut);
+  }
+
+  .masthead-nav {
+    gap: 1.1rem;
+  }
+
+  .about-contact li {
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-faint);
+}
+
+/* ── Motion ────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
