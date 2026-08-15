@@ -1,0 +1,36 @@
+{
+  "name": "photo-gallery",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "photos": "node build/build.mjs",
+    "add": "node build/add.mjs",
+    "studio": "node build/studio.mjs",
+    "deploy": "node build/deploy.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-photo-album": "^3.0.0",
+    "yet-another-react-lightbox": "^3.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "jsdom": "^26.0.0",
+    "sharp": "^0.35.0",
+    "typescript": "~5.9.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.0.0"
+  }
+}
