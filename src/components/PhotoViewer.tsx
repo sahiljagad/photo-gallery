@@ -1,9 +1,7 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import Lightbox from 'yet-another-react-lightbox';
 import Counter from 'yet-another-react-lightbox/plugins/counter';
-import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails';
 import 'yet-another-react-lightbox/styles.css';
-import 'yet-another-react-lightbox/plugins/thumbnails.css';
 import type { Album, Photo } from '../types';
 import { toSlide, buildSrcSet, imgUrl, altText, exposureLine, gearLine, shotDate } from '../lib/photos';
 
@@ -53,7 +51,28 @@ function ShotLabel({ photo, album }: { photo: Photo; album: Album }) {
 
 export function PhotoViewer({ album, index, onClose, onIndexChange }: PhotoViewerProps) {
   const slides = album.photos.map((p) => toSlide(p, album));
-  const thumbnailsRef = useRef<{ visible: boolean; show: () => void; hide: () => void } | null>(null);
+
+  // Label hidden or shown, remembered between visits. Someone who wants the
+  // photograph on its own usually wants that every time, not once.
+  const [bare, setBare] = useState(() => {
+    try { return localStorage.getItem('viewer-bare') === '1'; } catch { return false; }
+  });
+
+  const toggleBare = useCallback(() => {
+    setBare((b) => {
+      try { localStorage.setItem('viewer-bare', b ? '0' : '1'); } catch {}
+      return !b;
+    });
+  }, []);
+
+  // `i` for info, the convention in most photo viewers
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === 'i' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); toggleBare(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleBare]);
 
   const handleView = useCallback(
     ({ index: i }: { index: number }) => {
@@ -68,31 +87,36 @@ export function PhotoViewer({ album, index, onClose, onIndexChange }: PhotoViewe
       close={onClose}
       slides={slides}
       index={index}
-      plugins={[Counter, Thumbnails]}
+      plugins={[Counter]}
       carousel={{ preload: 2 }}
+      toolbar={{
+        buttons: [
+          <button
+            key="bare"
+            type="button"
+            className="yarl__button viewer-toggle"
+            onClick={toggleBare}
+            aria-pressed={bare}
+            title={bare ? 'Show details (i)' : 'Hide details (i)'}
+            aria-label={bare ? 'Show details' : 'Hide details'}
+          >
+            {bare ? 'Details' : 'Photo only'}
+          </button>,
+          'close',
+        ],
+      }}
       on={{ view: handleView }}
       controller={{ closeOnBackdropClick: true }}
       // Fully opaque: at 98% the masthead and album title ghost through
       // behind the photograph and read as a rendering fault.
       styles={{ container: { backgroundColor: '#08090b' } }}
-      thumbnails={{
-        ref: thumbnailsRef,
-        hidden: true,
-        showToggle: true,
-        width: 60,
-        height: 40,
-        gap: 8,
-        padding: 2,
-        border: 0,
-        borderRadius: 2,
-      }}
       render={{
         slide: ({ slide }) => {
           const photo = (slide as any).photo as Photo | undefined;
           if (!photo) return undefined;
 
           return (
-            <figure className="lightbox-slide">
+            <figure className={`lightbox-slide${bare ? ' bare' : ''}`}>
               <div className="lightbox-image">
                 <picture>
                   <source
@@ -109,7 +133,7 @@ export function PhotoViewer({ album, index, onClose, onIndexChange }: PhotoViewe
                   />
                 </picture>
               </div>
-              <ShotLabel photo={photo} album={album} />
+              {!bare && <ShotLabel photo={photo} album={album} />}
             </figure>
           );
         },

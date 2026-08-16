@@ -588,6 +588,9 @@ a {
 
 /* ── Lightbox ──────────────────────────────────────────────────────── */
 
+/* The label sits below the frame, not over it — the same reasoning as the
+   album grid. A caption laid across a photograph competes with it. The
+   "Photo only" toggle is for when you want the frame with nothing else. */
 .lightbox-slide {
   display: flex;
   flex-direction: column;
@@ -596,35 +599,45 @@ a {
   gap: 1.1rem;
   width: 100%;
   height: 100%;
+  margin: 0;
   padding: clamp(1rem, 3vw, 2.5rem) clamp(1rem, 4vw, 3rem);
 }
 
-/* The image takes whatever height the label leaves and fits inside it.
-   `object-fit: contain` on a filled box is what makes this reliable — a
-   percentage max-height on the <img> resolves against a <picture> of
-   indefinite height, so the image overflows and the label lands on top. */
 .lightbox-image {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 0;
+  flex: 1;
 }
 
 .lightbox-image picture {
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .lightbox-image img {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+}
+
+/* Photo only: the frame takes the whole viewport, nothing else on screen */
+.lightbox-slide.bare {
+  padding: 0;
+  gap: 0;
+}
+
+.lightbox-slide.bare .lightbox-image img {
+  max-width: 100vw;
+  max-height: 100vh;
 }
 
 /* The exhibition label — everything the metadata can honestly say */
@@ -633,7 +646,7 @@ a {
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.24rem;
   max-width: 64ch;
   color: #e9eae7;
 }
@@ -645,9 +658,7 @@ a {
   line-height: 1.3;
 }
 
-.shot-latin {
-  color: rgba(233, 234, 231, 0.62);
-}
+.shot-latin { color: rgba(233, 234, 231, 0.62); }
 
 .shot-line {
   font-family: var(--font-mono);
@@ -658,14 +669,8 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-.shot-tech {
-  color: rgba(233, 234, 231, 0.5);
-}
-
-.shot-gear {
-  font-size: 0.64rem;
-  color: rgba(233, 234, 231, 0.36);
-}
+.shot-gear { color: rgba(233, 234, 231, 0.42); }
+.shot-tech { color: rgba(233, 234, 231, 0.48); }
 
 .shot-note {
   font-size: 0.86rem;
@@ -674,14 +679,24 @@ a {
   margin-top: 0.35rem;
 }
 
-.yarl__thumbnails_thumbnail {
-  opacity: 0.45;
-  transition: opacity 0.2s;
+/* The toolbar toggle, set as a word rather than an ambiguous glyph */
+.viewer-toggle {
+  font-family: var(--font-mono) !important;
+  font-size: 0.64rem !important;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  width: auto !important;
+  padding: 0.5rem 0.8rem !important;
+  opacity: 0.65;
+  transition: opacity var(--t);
 }
 
-.yarl__thumbnails_thumbnail_active,
-.yarl__thumbnails_thumbnail:hover {
-  opacity: 1;
+.viewer-toggle:hover { opacity: 1; }
+
+@media (max-width: 700px) {
+  .lightbox-slide { gap: 0.8rem; padding: 0.75rem; }
+  .shot-line { font-size: 0.62rem; }
+  .viewer-toggle { font-size: 0.58rem !important; padding: 0.5rem !important; }
 }
 
 .yarl__slide_counter {
