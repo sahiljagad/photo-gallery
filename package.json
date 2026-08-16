@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "vite build",
     "photos": "node build/build.mjs",
-    "add": "node build/add.mjs",
     "studio": "node build/studio.mjs",
     "deploy": "node build/deploy.mjs",
     "test": "vitest run",
