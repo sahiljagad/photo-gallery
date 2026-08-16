@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 /**
- * build.mjs — Scans photos/, generates derivatives, measures, sequences,
- * and writes public/photos.json.
+ * build.mjs — turns chosen photographs into a site.
+ *
+ * The published set is defined by albums/*.json and nothing else. This file
+ * used to glob every image in a directory, which meant the set of published
+ * photographs was "whatever happened to be on disk" — a definition nobody
+ * ever chose, and the reason an album could grow by 51 frames unnoticed.
+ *
+ * Now: a frame that is not listed in a manifest is never read, never resized,
+ * never written to photos.json, and never deployed. Absence, not a flag.
  */
 
-import { readdir, stat, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname, basename, parse } from 'node:path';
+import { join, parse } from 'node:path';
 import sharp from 'sharp';
 import {
   measurePhoto,
@@ -17,13 +24,12 @@ import {
   meanTonalStep,
 } from './flow.mjs';
 import { readMetadata } from './exif.mjs';
+import { photoPath, listSourceFiles, loadConfig } from './library.mjs';
+import { readAllManifests, validateManifest, selectedPhotos } from './albums.mjs';
 
-const PHOTOS_DIR = join(import.meta.dirname, '..', 'photos');
 const PUBLIC_DIR = join(import.meta.dirname, '..', 'public');
 const IMG_DIR = join(PUBLIC_DIR, 'img');
 const WIDTHS = [640, 1080, 1600, 2200];
-const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.webp']);
-const ALBUM_RE = /^(\d{4}-\d{2}-\d{2})[_ -]+(.+)$/;
 
 // Particles to keep lowercase in title-case
 const PARTICLES = new Set([
@@ -42,126 +48,43 @@ function titleCase(str) {
     .join(' ');
 }
 
-// Camera-generated filenames that shouldn't become titles
 const CAMERA_RE = /^_?DSC[_-]?\d|^IMG[_-]?\d|^DSCN?\d|^P\d{6,}|^fullsizeoutput|^DCIM|^GOPR|^DJI_/i;
 
 /**
- * Parse a filename into title, optional latin name, and pinned order.
- * - `douro-sunset.jpg` → { title: "Douro Sunset" }
- * - `great-egret--ardea-alba.jpg` → { title: "Great Egret", latin: "Ardea alba" }
- * - `03_frame.jpg` → { title: "Frame", pinned: 3 } (explicit pin)
- * - `portugal-01.jpg` → { title: null, seq: 1 } (export numbering, not a pin)
- * - `DSC_3154.jpg` → { title: null } (camera filename = no title)
- *
- * Pinning is deliberately narrow. An `NN_` prefix is something you type on
- * purpose; the trailing numbers Lightroom puts on an export are not a request
- * for that order, and treating them as one silently disabled sequencing for
- * every album exported that way.
+ * Fall back to the filename for a title when the manifest has none.
+ * `great-egret--ardea-alba.jpg` → { title: "Great Egret", latin: "Ardea alba" }
+ * Camera filenames and export numbering yield nothing, which is correct —
+ * "DSC 3154" is not a title.
  */
-function parseFilename(filename) {
-  const name = parse(filename).name;
-  const result = { title: null, latin: undefined, pinned: undefined, seq: undefined };
+function titleFromFilename(filename) {
+  const base = parse(filename).name.replace(/^\d+_/, '');
+  if (CAMERA_RE.test(base)) return {};
+  if (/^([a-z][\w-]*?)-?\d{1,4}$/i.test(base)) return {};
 
-  // Explicit pin: leading digits followed by an underscore
-  const pinMatch = name.match(/^(\d+)_(.+)$/);
-  const base = pinMatch ? pinMatch[2] : name;
-  if (pinMatch) result.pinned = parseInt(pinMatch[1], 10);
-
-  // Camera-generated filenames get no title
-  if (CAMERA_RE.test(base)) {
-    const camSeq = base.match(/(\d{1,5})\s*\d*$/);
-    if (camSeq) result.seq = parseInt(camSeq[1], 10);
-    return result;
-  }
-
-  // Slug-number patterns like "portugal-01" or "glacier-066" — no title,
-  // and the number is kept only as a stable tiebreak
-  const slugNumMatch = base.match(/^([a-z][\w-]*?)-?(\d{1,4})$/i);
-  if (slugNumMatch) {
-    result.seq = parseInt(slugNumMatch[2], 10);
-    return result;
-  }
-
-  // Check for latin name (double dash separator)
   const parts = base.split('--');
-  const rawTitle = parts[0].replace(/-/g, ' ').trim();
-  if (rawTitle) result.title = titleCase(rawTitle);
+  const raw = parts[0].replace(/-/g, ' ').trim();
+  if (!raw) return {};
 
+  const out = { title: titleCase(raw) };
   if (parts.length > 1) {
-    const latinParts = parts[1].replace(/-/g, ' ').trim().split(/\s+/);
-    result.latin =
-      latinParts[0].charAt(0).toUpperCase() +
-      latinParts[0].slice(1).toLowerCase() +
-      (latinParts.length > 1 ? ' ' + latinParts.slice(1).map((w) => w.toLowerCase()).join(' ') : '');
+    const w = parts[1].replace(/-/g, ' ').trim().split(/\s+/);
+    out.latin = w[0].charAt(0).toUpperCase() + w[0].slice(1).toLowerCase() +
+      (w.length > 1 ? ' ' + w.slice(1).map((x) => x.toLowerCase()).join(' ') : '');
   }
-
-  return result;
-}
-
-/** Scan photos/ for album directories, sorted newest first. */
-async function scanAlbums() {
-  if (!existsSync(PHOTOS_DIR)) {
-    console.log('No photos/ directory found. Nothing to build.');
-    return [];
-  }
-
-  const entries = await readdir(PHOTOS_DIR, { withFileTypes: true });
-  const albums = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const match = entry.name.match(ALBUM_RE);
-    if (!match) continue;
-
-    // Read optional _meta.json
-    let meta = {};
-    const metaPath = join(PHOTOS_DIR, entry.name, '_meta.json');
-    if (existsSync(metaPath)) {
-      try { meta = JSON.parse(await readFile(metaPath, 'utf8')); } catch {}
-    }
-
-    albums.push({
-      id: entry.name,
-      // Folder date is a fallback. It records when the files were copied, not
-      // when they were taken — every album in this archive was off by days,
-      // and one by a year. Capture time from EXIF wins where it exists.
-      folderDate: match[1],
-      date: match[1],
-      title: meta.title || titleCase(match[2].replace(/[-_]/g, ' ')),
-      region: meta.region,
-      lat: meta.lat,
-      lon: meta.lon,
-      note: meta.note,
-      intro: meta.intro || meta.note,
-    });
-  }
-
-  // Sort newest first
-  albums.sort((a, b) => b.date.localeCompare(a.date));
-  return albums;
-}
-
-/** List image files in an album directory. */
-async function listImages(albumDir) {
-  const entries = await readdir(albumDir);
-  return entries
-    .filter((f) => IMAGE_EXTS.has(extname(f).toLowerCase()))
-    .sort();
+  return out;
 }
 
 /**
- * Generate derivatives for a single image. Returns the photo record.
- * Skips generation if outputs are newer than the source (incremental).
+ * Generate derivatives and measurements for one photograph.
+ * Incremental: an output newer than its source is left alone.
  */
-async function processImage(albumId, filename, albumDir) {
-  const srcPath = join(albumDir, filename);
+async function processImage(albumId, source, file) {
+  const srcPath = await photoPath(source, file);
   const srcStat = await stat(srcPath);
-  const parsed = parseFilename(filename);
-  const photoId = parse(filename).name;
+  const photoId = parse(file).name;
   const outDir = join(IMG_DIR, albumId);
   await mkdir(outDir, { recursive: true });
 
-  // Read metadata for dimensions and capture details
   const meta = await sharp(srcPath).metadata();
   const masterW = meta.width;
   const masterH = meta.height;
@@ -169,23 +92,23 @@ async function processImage(albumId, filename, albumDir) {
   const { shot, rating } = readMetadata(meta);
 
   const sizes = [];
+  const targets = WIDTHS.filter((w) => w <= masterW);
+  if (targets.length === 0) targets.push(masterW);
 
-  for (const w of WIDTHS) {
-    if (w > masterW) continue; // don't upscale
-
+  for (const w of targets) {
     const h = Math.round(w / ar);
     const webpPath = join(outDir, `${photoId}-${w}.webp`);
     const jpgPath = join(outDir, `${photoId}-${w}.jpg`);
 
-    // Incremental: skip if output newer than source
-    const webpFresh = existsSync(webpPath) && (await stat(webpPath)).mtimeMs > srcStat.mtimeMs;
-    const jpgFresh = existsSync(jpgPath) && (await stat(jpgPath)).mtimeMs > srcStat.mtimeMs;
+    const fresh = async (p) => existsSync(p) && (await stat(p)).mtimeMs > srcStat.mtimeMs;
 
-    if (!webpFresh) {
-      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toFile(webpPath);
+    if (!(await fresh(webpPath))) {
+      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 }).toFile(webpPath);
     }
-    if (!jpgFresh) {
-      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85, progressive: true }).toFile(jpgPath);
+    if (!(await fresh(jpgPath))) {
+      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, progressive: true }).toFile(jpgPath);
     }
 
     sizes.push({
@@ -196,56 +119,23 @@ async function processImage(albumId, filename, albumDir) {
     });
   }
 
-  // If no derivative fits (image smaller than smallest width), generate at original size
-  if (sizes.length === 0) {
-    const w = masterW;
-    const h = masterH;
-    const webpPath = join(outDir, `${photoId}-${w}.webp`);
-    const jpgPath = join(outDir, `${photoId}-${w}.jpg`);
-    const webpFresh = existsSync(webpPath) && (await stat(webpPath)).mtimeMs > srcStat.mtimeMs;
-    const jpgFresh = existsSync(jpgPath) && (await stat(jpgPath)).mtimeMs > srcStat.mtimeMs;
-    if (!webpFresh) {
-      await sharp(srcPath).webp({ quality: 80 }).toFile(webpPath);
-    }
-    if (!jpgFresh) {
-      await sharp(srcPath).jpeg({ quality: 85, progressive: true }).toFile(jpgPath);
-    }
-    sizes.push({
-      width: w,
-      height: h,
-      src: `img/${albumId}/${photoId}-${w}.jpg`,
-      srcWebp: `img/${albumId}/${photoId}-${w}.webp`,
-    });
-  }
-
-  // LQIP: 20px wide, blur 1.4, JPEG q40, base64
+  // LQIP: 20px wide, blurred, inlined so it paints with the JSON
   const lqipBuf = await sharp(srcPath)
-    .resize(20, null, { fit: 'inside' })
-    .blur(1.4)
-    .jpeg({ quality: 40 })
-    .toBuffer();
+    .resize(20, null, { fit: 'inside' }).blur(1.4).jpeg({ quality: 40 }).toBuffer();
   const lqip = `data:image/jpeg;base64,${lqipBuf.toString('base64')}`;
 
-  // Measure: raw pixels at a workable size, aspect ratio preserved.
-  // `fit: 'inside'` matters — squashing to a square distorts the gradient
-  // field, which is what busy and the centre of visual mass are read from.
+  // Measurement wants raw pixels with the aspect ratio intact
   const { data: rawBuf, info } = await sharp(srcPath)
-    .resize(288, 288, { fit: 'inside' })
-    .raw()
-    .ensureAlpha()
+    .resize(288, 288, { fit: 'inside' }).raw().ensureAlpha()
     .toBuffer({ resolveWithObject: true });
   const measurements = measurePhoto(new Uint8Array(rawBuf), info.width, info.height);
 
-  // Use derivative dimensions, not master dimensions (gotcha #3)
-  const largest = sizes[sizes.length - 1] || { width: masterW, height: masterH };
+  const largest = sizes[sizes.length - 1];
 
   return {
     id: photoId,
+    file,
     src: largest.src,
-    title: parsed.title,
-    latin: parsed.latin || undefined,
-    pinned: parsed.pinned,
-    seq: parsed.seq,
     shot,
     rating,
     ar,
@@ -257,188 +147,181 @@ async function processImage(albumId, filename, albumDir) {
   };
 }
 
-/**
- * Load or create captions.json for an album.
- * Never overwrites an existing file.
- */
-async function loadCaptions(albumDir, photos) {
-  const captionsPath = join(albumDir, 'captions.json');
-  let captions = {};
-
-  if (existsSync(captionsPath)) {
-    try { captions = JSON.parse(await readFile(captionsPath, 'utf8')); } catch {}
-  } else {
-    // Generate initial captions
-    for (const p of photos) {
-      captions[p.id] = { title: p.title, latin: p.latin || null, note: null };
-    }
-    await writeFile(captionsPath, JSON.stringify(captions, null, 2));
-    console.log(`  Created captions.json`);
-  }
-
-  return captions;
+/** Earliest and latest capture dates in an album, as YYYY-MM-DD. */
+function captureRange(photos) {
+  const stamps = photos.map((p) => p.shot?.takenAt).filter(Boolean).sort();
+  if (!stamps.length) return null;
+  return { start: stamps[0].slice(0, 10), end: stamps[stamps.length - 1].slice(0, 10) };
 }
 
-/** Apply caption overrides to photo records. */
-function applyCaptions(photos, captions) {
-  for (const p of photos) {
-    const c = captions[p.id];
-    if (!c) continue;
-    if (c.title) p.title = c.title;
-    if (c.latin) p.latin = c.latin;
-    if (c.note) p.note = c.note;
-  }
-}
-
-/** True only when every file carries an explicit `NN_` pin. */
-function allPinned(photos) {
-  return photos.length > 0 && photos.every((p) => p.pinned != null);
-}
-
-/**
- * Capture-time order, falling back to export numbering then filename so the
- * result is deterministic even when a file has no readable EXIF date.
- */
+/** Capture-time order — the baseline the sequencer starts from. */
 function chronological(photos) {
   return [...photos].sort((a, b) => {
     const ta = a.shot?.takenAt, tb = b.shot?.takenAt;
     if (ta && tb && ta !== tb) return ta.localeCompare(tb);
     if (ta && !tb) return -1;
     if (!ta && tb) return 1;
-    if (a.seq != null && b.seq != null && a.seq !== b.seq) return a.seq - b.seq;
-    return a.id.localeCompare(b.id);
+    return a.file.localeCompare(b.file);
   });
 }
 
-/** Earliest and latest capture dates in an album, as YYYY-MM-DD. */
-function captureRange(photos) {
-  const stamps = photos.map((p) => p.shot?.takenAt).filter(Boolean).sort();
-  if (stamps.length === 0) return null;
-  return { start: stamps[0].slice(0, 10), end: stamps[stamps.length - 1].slice(0, 10) };
+/**
+ * Delete derivatives that no longer belong to anything published.
+ *
+ * This matters more than housekeeping: unpublishing a photograph has to remove
+ * its files, or the next deploy ships an image nobody chose. Orphans are a
+ * privacy leak, not clutter.
+ */
+async function pruneOrphans(archive) {
+  if (!existsSync(IMG_DIR)) return { dirs: 0, files: 0 };
+
+  const keepDirs = new Set(archive.map((a) => a.id));
+  const keepFiles = new Set();
+  for (const album of archive) {
+    for (const p of album.photos) {
+      for (const s of p.sizes) { keepFiles.add(s.src); keepFiles.add(s.srcWebp); }
+    }
+  }
+
+  let dirs = 0, files = 0;
+  for (const entry of await readdir(IMG_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    if (!keepDirs.has(entry.name)) {
+      await rm(join(IMG_DIR, entry.name), { recursive: true, force: true });
+      dirs++;
+      continue;
+    }
+    for (const f of await readdir(join(IMG_DIR, entry.name))) {
+      if (!keepFiles.has(`img/${entry.name}/${f}`)) {
+        await rm(join(IMG_DIR, entry.name, f), { force: true });
+        files++;
+      }
+    }
+  }
+  return { dirs, files };
 }
 
 // ── Main ────────────────────────────────────────────────────────────
 
-export async function build() {
+/**
+ * @param {object} opts
+ * @param {boolean} opts.includeDrafts — build albums marked draft, for local
+ *   preview only. Deploy never sets this, so a draft cannot reach the site.
+ */
+export async function build({ includeDrafts = false } = {}) {
   const startTime = Date.now();
-  const albums = await scanAlbums();
-  if (albums.length === 0) return;
+  await loadConfig();
+
+  const all = await readAllManifests();
+  if (all.length === 0) {
+    console.log('No album manifests in albums/. Run `npm run curate` to choose photographs.');
+    return [];
+  }
+
+  // Validate everything before generating anything — a broken manifest should
+  // stop the build, not produce a half-built site.
+  const problems = [];
+  for (const m of all) {
+    const files = await listSourceFiles(m.source);
+    for (const err of validateManifest(m, files)) problems.push(`${m.id}: ${err}`);
+  }
+  if (problems.length) {
+    console.error('\n✗ Manifest problems:\n' + problems.map((p) => `   ${p}`).join('\n') + '\n');
+    throw new Error(`${problems.length} manifest problem(s)`);
+  }
+
+  const manifests = all.filter((m) => (includeDrafts || m.published) && selectedPhotos(m).length > 0);
+
+  const skipped = all.filter((m) => !manifests.includes(m));
+  for (const m of skipped) {
+    const n = selectedPhotos(m).length;
+    console.log(`   skipping ${m.id} — ${n === 0 ? 'nothing selected' : 'draft'}`);
+  }
 
   await mkdir(PUBLIC_DIR, { recursive: true });
-
   const archive = [];
 
-  for (const album of albums) {
-    console.log(`\n📁 ${album.title} (${album.date})`);
-    const albumDir = join(PHOTOS_DIR, album.id);
-    const imageFiles = await listImages(albumDir);
-    console.log(`  ${imageFiles.length} images`);
+  for (const manifest of manifests) {
+    const chosen = selectedPhotos(manifest);
+    console.log(`\n📁 ${manifest.title || manifest.id} — ${chosen.length} selected`);
 
-    // Process all images
     const photos = [];
-    for (const file of imageFiles) {
-      process.stdout.write(`  Processing ${file}...`);
-      const photo = await processImage(album.id, file, albumDir);
+    for (const entry of chosen) {
+      process.stdout.write(`  ${entry.file}...`);
+      const photo = await processImage(manifest.id, manifest.source, entry.file);
+
+      // Manifest captions win; the filename is only a fallback
+      const fromName = titleFromFilename(entry.file);
+      photo.title = entry.title ?? fromName.title ?? null;
+      photo.latin = entry.latin ?? fromName.latin ?? undefined;
+      photo.note = entry.note ?? undefined;
+
       photos.push(photo);
       console.log(' done');
     }
 
-    // Load/create captions and apply overrides
-    const captions = await loadCaptions(albumDir, photos);
-    applyCaptions(photos, captions);
-
-    // Correct the album date from capture time
     const range = captureRange(photos);
-    if (range) {
-      if (range.start !== album.folderDate) {
-        console.log(`  Date from EXIF: ${album.folderDate} → ${range.start}` +
-          (range.end !== range.start ? ` (through ${range.end})` : ''));
-      }
-      album.date = range.start;
-      album.dateEnd = range.end;
-    }
-
-    // Chronological is the baseline: it is the one ordering that is always
-    // meaningful, and it decides ties the cost function can't separate.
     const baseline = chronological(photos);
-
-    // Normalise measurements within the album; scales are reused downstream
     const scales = normaliseAlbum(baseline);
 
-    // Sequence
     let ordered;
-    let pinned = false;
-    const beforeStep = meanTonalStep(baseline);
-    if (allPinned(baseline)) {
-      ordered = [...baseline].sort((a, b) => a.pinned - b.pinned);
-      pinned = true;
-      console.log(`  Pinned order (every file carries an NN_ prefix)`);
-    } else if (baseline.length < 3) {
+    if (baseline.length < 3) {
       ordered = baseline;
-      console.log(`  Too few photos to sequence (${baseline.length})`);
     } else {
+      const before = meanTonalStep(baseline);
       ordered = sequenceAlbum(baseline, scales);
-      console.log(`  Sequenced: tonal step ${beforeStep.toFixed(1)} → ${meanTonalStep(ordered).toFixed(1)} L*`);
+      ordered = applyGazePairing(ordered, scales);
+      console.log(`  sequenced: tonal step ${before.toFixed(1)} → ${meanTonalStep(ordered).toFixed(1)} L*`);
     }
-
-    // Mass pairing — a finishing touch, and never against an explicit order
-    if (!pinned) ordered = applyGazePairing(ordered, scales);
-
-    // Assign final order
     ordered.forEach((p, i) => { p.order = i; });
 
-    // Pick cover (separate from sequence position)
-    const cover = pickCover(ordered);
-
-    // Clean up internal fields
-    for (const p of ordered) {
-      delete p.pinned;
-      delete p.seq;
-    }
+    // An explicit cover wins; otherwise the algorithm picks one
+    const cover = ordered.find((p) => p.file === manifest.cover) ?? pickCover(ordered);
 
     archive.push({
-      id: album.id,
-      title: album.title,
-      date: album.date,
-      dateEnd: album.dateEnd,
-      region: album.region,
-      lat: album.lat,
-      lon: album.lon,
-      note: album.note,
-      intro: album.intro,
+      id: manifest.id,
+      title: manifest.title || manifest.id,
+      date: range?.start ?? '1970-01-01',
+      dateEnd: range?.end,
+      region: manifest.region ?? undefined,
+      intro: manifest.intro ?? undefined,
+      draft: manifest.published ? undefined : true,
       cover,
       photos: ordered,
     });
   }
 
-  // Re-sort now that dates reflect capture time rather than copy time
   archive.sort((a, b) => b.date.localeCompare(a.date));
 
-  // Social card: a fixed 1200×630 crop of the newest album's cover, so a
-  // shared link previews with a photograph rather than a blank rectangle.
+  const pruned = await pruneOrphans(archive);
+  if (pruned.dirs || pruned.files) {
+    console.log(`\n🧹 Removed ${pruned.dirs} album folder(s) and ${pruned.files} orphaned file(s)`);
+  }
+
   if (archive[0]) {
-    const cover = archive[0].cover;
-    const source = join(PUBLIC_DIR, cover.sizes[cover.sizes.length - 1]?.src ?? cover.src);
+    const c = archive[0].cover;
+    const source = join(PUBLIC_DIR, c.sizes[c.sizes.length - 1].src);
     if (existsSync(source)) {
-      await sharp(source)
-        .resize(1200, 630, { fit: 'cover', position: 'attention' })
-        .jpeg({ quality: 82, progressive: true })
-        .toFile(join(PUBLIC_DIR, 'og-image.jpg'));
-      console.log(`   Social card from ${cover.id}`);
+      await sharp(source).resize(1200, 630, { fit: 'cover', position: 'attention' })
+        .jpeg({ quality: 82, progressive: true }).toFile(join(PUBLIC_DIR, 'og-image.jpg'));
     }
   }
 
-  // Write photos.json
   const outPath = join(PUBLIC_DIR, 'photos.json');
   await writeFile(outPath, JSON.stringify(archive, null, 2));
-  console.log(`\n✅ Wrote ${outPath} (${archive.length} albums, ${archive.reduce((s, a) => s + a.photos.length, 0)} photos)`);
-  console.log(`   Built in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  const total = archive.reduce((s, a) => s + a.photos.length, 0);
+  console.log(`\n✅ ${archive.length} album(s), ${total} photograph(s) in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+  if (archive.some((a) => a.draft)) {
+    console.log('   ⚠ includes drafts — these are for local preview and are excluded from deploy');
+  }
+  return archive;
 }
 
-// Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  build().catch((err) => {
-    console.error(err);
+  const includeDrafts = process.argv.includes('--drafts');
+  build({ includeDrafts }).catch((err) => {
+    console.error(err.message);
     process.exit(1);
   });
 }
