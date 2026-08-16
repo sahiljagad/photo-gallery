@@ -2,28 +2,20 @@ import type { Archive } from '../types';
 import { Picture } from './Picture';
 
 /* ─────────────────────────────────────────────────────────────────────
-   PLACEHOLDER COPY — replace with your own.
-   Everything a human should write lives in this block. The numbers below
-   the text are counted from photos.json at runtime, so they stay true on
-   their own; don't hard-code them here.
+   The words. Everything a human should write lives here.
+   The counts below the text are derived from photos.json at runtime, so
+   they stay true on their own — don't hard-code them.
    ───────────────────────────────────────────────────────────────────── */
 
 const BIO = [
-  `Placeholder. Two or three sentences on who you are and what pulls you
-   toward wildlife and landscape work — where you started, what you are
-   drawn to photograph, and why.`,
-  `Placeholder. A second paragraph with room for how you work: the patience
-   a 500mm lens demands, the trips you plan around light rather than
-   itineraries, whatever is actually true.`,
+  `Wildlife and landscape, mostly at either end of the day. Kenya, Yellowstone,
+   Costa Rica, Central India, Portugal and the American West.`,
 ];
 
 const CONTACT: { label: string; href: string; value: string }[] = [
-  { label: 'Email', href: 'mailto:sahil@example.com', value: 'sahil@example.com' },
-  { label: 'Instagram', href: 'https://instagram.com/', value: '@placeholder' },
+  { label: 'Email', href: 'mailto:sahiljagad@gmail.com', value: 'sahiljagad@gmail.com' },
+  { label: 'Instagram', href: 'https://instagram.com/sahiljagad_photos', value: '@sahiljagad_photos' },
 ];
-
-const PRINTS = `Placeholder. A line about print availability or licensing, or
-delete this block if you'd rather not offer either.`;
 
 /* ─────────────────────────────────────────────────────────────────── */
 
@@ -71,18 +63,18 @@ export function About({ archive }: AboutProps) {
               {CONTACT.map((c) => (
                 <li key={c.label}>
                   <span className="contact-label">{c.label}</span>
-                  <a href={c.href} rel="me noopener">{c.value}</a>
+                  <a
+                    href={c.href}
+                    rel="me noopener noreferrer"
+                    target={c.href.startsWith('http') ? '_blank' : undefined}
+                  >
+                    {c.value}
+                  </a>
                 </li>
               ))}
             </ul>
           </section>
 
-          {PRINTS && (
-            <section className="about-prints">
-              <h2 className="section-label">Prints</h2>
-              <p>{PRINTS}</p>
-            </section>
-          )}
         </div>
 
         {portrait && (
