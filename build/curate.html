@@ -352,6 +352,7 @@ kbd {
       <button class="btn" id="lp-toggle">Select</button>
       <button class="btn" id="lp-cover">★ Cover</button>
     </div>
+    <button class="btn" id="lp-next-untitled">Next untitled →</button>
     <div class="field">
       <label for="lp-title">Title</label>
       <input type="text" id="lp-title" placeholder="Mountain Goat">
@@ -362,8 +363,10 @@ kbd {
       <textarea id="lp-note" placeholder="Optional. A sentence about the frame."></textarea>
     </div>
     <p class="hint" style="color:var(--faint)">
-      Captions are saved with the album — close this and hit Save.
+      <kbd>Enter</kbd> next frame · <kbd>⇧Enter</kbd> previous · <kbd>Esc</kbd> close.
+      Titles save with the album.
     </p>
+    <p class="hint" id="lp-progress" style="color:var(--faint)"></p>
   </div>
 </div>
 
@@ -671,7 +674,10 @@ function openLoupe(idx) {
   $('#lp-toggle').textContent = f.selected ? 'Deselect' : 'Select';
   $('#lp-toggle').classList.toggle('on', f.selected);
   $('#lp-cover').classList.toggle('on', cur.cover === f.file);
+  const titled = files.filter((x) => x.title).length;
+  $('#lp-progress').textContent = `${titled} of ${files.length} titled in this album`;
   $('#lp-title').focus();
+  $('#lp-title').select();
 }
 
 function closeLoupe() { commitLoupe(); $('#loupe').hidden = true; lpIdx = null; }
@@ -690,6 +696,24 @@ function stepLoupe(d) {
   const next = lpIdx + d;
   if (next >= 0 && next < files.length) openLoupe(next);
 }
+
+// Titling an album is a run of photographs, not a series of visits: Enter
+// commits and advances, so the whole loop is type, Enter, type, Enter.
+$('#lp-title').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (e.shiftKey) { stepLoupe(-1); return; }
+  if (lpIdx < files.length - 1) stepLoupe(1);
+  else { closeLoupe(); if (dirty) save(); }
+});
+
+// Jump straight to the next frame that still has no title
+$('#lp-next-untitled').onclick = () => {
+  commitLoupe();
+  const next = files.findIndex((f, i) => i > lpIdx && !f.title);
+  if (next === -1) { alert('No untitled frames after this one.'); return; }
+  openLoupe(next);
+};
 
 $('#lp-close').onclick = closeLoupe;
 $('#lp-prev').onclick = () => stepLoupe(-1);
