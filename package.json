@@ -11,7 +11,8 @@
     "studio": "node build/studio.mjs",
     "deploy": "node build/deploy.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "curate": "node build/curate.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

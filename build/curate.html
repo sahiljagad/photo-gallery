@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curate — Sahil Jagad</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   The darkroom to the gallery's exhibition space. Same palette,
+   same typefaces as the site — dusk ground, lichen accent, serif
+   display, mono for anything that is a record rather than prose.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg:#0b0c0d; --panel:#111315; --sunk:#08090a; --well:#0e1011;
+  --fg:#e9eae7; --dim:#9aa09b; --faint:#6b716d;
+  --line:#23272a; --line-hi:#333a3d;
+  --accent:#9bb08f; --accent-dim:#5f7256; --on-accent:#0b0c0d;
+  --warn:#c9a227;
+
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Hoefler Text',Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;
+  --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --t:.18s cubic-bezier(.2,0,.2,1);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:14px;
+  height:100vh; display:grid; grid-template-columns:264px 1fr; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button { font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:2px; }
+
+.label {
+  font-family:var(--mono); font-size:.62rem; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--faint); font-weight:500;
+}
+.record {
+  font-family:var(--mono); font-size:.68rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--dim); font-variant-numeric:tabular-nums;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+aside { background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+.brand { padding:1.3rem 1.15rem .5rem; display:flex; flex-direction:column; gap:.5rem; }
+.brand h1 { font-family:var(--serif); font-size:.95rem; font-weight:400; letter-spacing:.2em; text-transform:uppercase; }
+.brand .sub { font-family:var(--mono); font-size:.6rem; letter-spacing:.1em; color:var(--faint); }
+.alist { overflow-y:auto; padding:.6rem 0 1rem; flex:1; }
+.alist > .label { padding:.5rem 1.15rem .45rem; display:block; }
+.alb {
+  width:100%; text-align:left; padding:.6rem 1.15rem; display:flex; flex-direction:column;
+  gap:.18rem; border-left:2px solid transparent; transition:background var(--t);
+}
+.alb:hover { background:#171a1c; }
+.alb.on { background:#151a16; border-left-color:var(--accent); }
+.alb b { font-family:var(--serif); font-weight:400; font-size:1rem; letter-spacing:.005em; }
+.alb .meta { font-family:var(--mono); font-size:.62rem; letter-spacing:.07em; color:var(--faint); font-variant-numeric:tabular-nums; }
+.alb.on .meta { color:var(--accent); }
+.alb .draft { color:var(--warn); }
+
+/* ── Main ────────────────────────────────────────────────── */
+main { display:flex; flex-direction:column; overflow:hidden; }
+
+header { border-bottom:1px solid var(--line); padding:1.15rem 1.5rem .95rem; display:flex; flex-direction:column; gap:.9rem; }
+.hrow { display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; flex-wrap:wrap; }
+.htitle { display:flex; flex-direction:column; gap:.28rem; min-width:0; }
+.htitle h2 { font-family:var(--serif); font-weight:400; font-size:1.75rem; line-height:1.1; letter-spacing:-.01em; }
+.hactions { display:flex; align-items:center; gap:.6rem; }
+
+.btn {
+  font-family:var(--mono); font-size:.65rem; letter-spacing:.1em; text-transform:uppercase;
+  border:1px solid var(--line-hi); border-radius:2px; padding:.42rem .8rem; color:var(--dim);
+  transition:border-color var(--t), color var(--t), background var(--t); white-space:nowrap;
+}
+.btn:hover:not(:disabled) { border-color:var(--dim); color:var(--fg); }
+.btn.on { border-color:var(--accent); color:var(--accent); }
+.btn.primary { border-color:var(--accent); color:var(--accent); }
+.btn.primary:hover:not(:disabled) { background:var(--accent); color:var(--on-accent); }
+.btn:disabled { opacity:.3; cursor:default; }
+
+/* details panel */
+details.meta-panel { border-top:1px solid var(--line); padding-top:.85rem; }
+details.meta-panel summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; }
+details.meta-panel summary::-webkit-details-marker { display:none; }
+details.meta-panel summary::before { content:'▸'; color:var(--faint); font-size:.65rem; transition:transform var(--t); }
+details.meta-panel[open] summary::before { transform:rotate(90deg); }
+.fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:.85rem 1.1rem; padding-top:.85rem; }
+.field { display:flex; flex-direction:column; gap:.28rem; }
+.field.wide { grid-column:1/-1; }
+.field label { font-family:var(--mono); font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.field .hint { font-size:.7rem; color:var(--faint); font-style:italic; }
+input[type=text] {
+  background:var(--sunk); border:1px solid var(--line); border-radius:2px; color:var(--fg);
+  padding:.45rem .6rem; font:inherit; font-size:.86rem; width:100%; transition:border-color var(--t);
+}
+input[type=text]:focus { border-color:var(--accent-dim); outline:none; }
+input[type=text]::placeholder { color:#4c5254; }
+input.mono { font-family:var(--mono); font-size:.78rem; }
+
+/* published toggle */
+.toggle { display:inline-flex; align-items:center; gap:.55rem; cursor:pointer; user-select:none; }
+.toggle input { position:absolute; opacity:0; width:0; height:0; }
+.track { width:34px; height:18px; border-radius:9px; background:#2a2f31; border:1px solid var(--line-hi); position:relative; transition:background var(--t), border-color var(--t); flex-shrink:0; }
+.track::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--faint); transition:transform var(--t), background var(--t); }
+.toggle input:checked + .track { background:var(--accent-dim); border-color:var(--accent); }
+.toggle input:checked + .track::after { transform:translateX(16px); background:var(--accent); }
+.toggle input:focus-visible + .track { outline:2px solid var(--accent); outline-offset:2px; }
+.toggle .txt { font-family:var(--mono); font-size:.65rem; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+.toggle input:checked ~ .txt { color:var(--accent); }
+
+/* ── Contact sheet ───────────────────────────────────────── */
+/* Justified rows, the shape the album pages use. Every frame keeps its true
+   aspect ratio and every row fills the width, so a portrait is a full-height
+   portrait rather than a small rectangle marooned in a landscape cell. */
+.sheet { flex:1; overflow-y:auto; padding:1.1rem 1.5rem 5rem; }
+.row-wrap { display:flex; gap:8px; margin-bottom:8px; }
+.tile {
+  position:relative; background:var(--well); border:1px solid var(--line); border-radius:2px;
+  cursor:pointer; overflow:hidden; flex-shrink:0;
+  transition:border-color var(--t), box-shadow var(--t);
+}
+.tile:hover { border-color:var(--line-hi); }
+.tile.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.tile img { width:100%; height:100%; object-fit:cover; display:block; opacity:.36; transition:opacity var(--t); }
+.tile:hover img { opacity:.8; }
+.tile.sel img, .tile.sel:hover img { opacity:1; }
+
+.tile .bar {
+  position:absolute; inset:auto 0 0 0; display:flex; align-items:center; gap:.4rem;
+  padding:1.4rem .45rem .3rem; background:linear-gradient(transparent,rgba(6,7,8,.92));
+  opacity:0; transition:opacity var(--t);
+}
+.tile:hover .bar { opacity:1; }
+.tile .fname { font-family:var(--mono); font-size:.58rem; color:#c3cac6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; }
+.tile .num {
+  position:absolute; top:.28rem; left:.45rem; font-family:var(--mono); font-size:.7rem;
+  color:var(--accent); font-variant-numeric:tabular-nums; text-shadow:0 1px 5px rgba(0,0,0,.95);
+}
+/* Both cover controls always exist in the DOM; the tile's class decides which
+   is visible. That keeps a selection change to a class toggle rather than a
+   rebuild, which is what was resetting the scroll position. */
+.tile .cover-tag, .tile .setcov {
+  position:absolute; top:.28rem; right:.42rem; font-family:var(--mono); font-size:.56rem;
+  border-radius:2px; padding:.12rem .34rem; background:rgba(8,9,10,.88);
+}
+.tile .cover-tag {
+  letter-spacing:.1em; color:var(--warn); cursor:pointer; border:1px solid var(--warn); display:none;
+}
+.tile.is-cover .cover-tag { display:block; }
+.tile.is-cover .setcov { display:none; }
+.tile .cover-tag:hover { background:var(--warn); color:var(--bg); }
+.tile .setcov {
+  letter-spacing:.08em; border:1px solid var(--line-hi);
+  color:var(--dim); opacity:0; transition:opacity var(--t);
+}
+.tile:hover .setcov { opacity:1; }
+.tile .setcov:hover { border-color:var(--warn); color:var(--warn); }
+.tile .num { display:none; }
+.tile.sel .num { display:block; }
+/* A tile too narrow for the button would have it overhang the frame */
+.tile.narrow .setcov, .tile.narrow .cover-tag { font-size:.5rem; padding:.1rem .22rem; }
+
+/* ── Loupe: one frame large, with its caption fields ─────── */
+.loupe {
+  position:fixed; inset:0; z-index:50; background:rgba(6,7,8,.97); backdrop-filter:blur(6px);
+  display:grid; grid-template-columns:minmax(0,1fr) 320px;
+  /* minmax(0,1fr) rather than 1fr: grid items default to min-height/min-width
+     auto, so a large photograph grows its own track past the viewport and the
+     img's max-height:100% then resolves against that oversized track. */
+  grid-template-rows:minmax(0,1fr);
+}
+.loupe[hidden] { display:none; }
+.loupe-img {
+  display:flex; align-items:center; justify-content:center;
+  padding:2rem; min-width:0; min-height:0; overflow:hidden; position:relative;
+}
+.loupe-img img { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; }
+
+@media (max-width:900px) {
+  .loupe { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; }
+  .loupe-side { border-left:none; border-top:1px solid var(--line); max-height:45vh; }
+  .loupe-img { padding:1rem; }
+}
+.loupe-nav {
+  position:absolute; top:50%; transform:translateY(-50%); width:2.4rem; height:3.4rem;
+  background:rgba(11,12,13,.7); border:1px solid var(--line); border-radius:2px; color:var(--dim); font-size:1.1rem;
+}
+.loupe-nav:hover:not(:disabled) { color:var(--fg); border-color:var(--line-hi); }
+.loupe-nav:disabled { opacity:.25; cursor:default; }
+.loupe-nav.prev { left:.7rem; } .loupe-nav.next { right:.7rem; }
+.loupe-side {
+  border-left:1px solid var(--line); background:var(--panel); padding:1.3rem 1.2rem;
+  display:flex; flex-direction:column; gap:1rem; overflow-y:auto; min-height:0;
+}
+.loupe-side .fname { font-family:var(--mono); font-size:.66rem; color:var(--faint); word-break:break-all; }
+.loupe-side .pos { font-family:var(--serif); font-size:1.35rem; }
+.loupe-close {
+  position:absolute; top:1rem; right:1rem; font-family:var(--mono); font-size:.62rem;
+  letter-spacing:.1em; color:var(--faint); border:1px solid var(--line); border-radius:2px; padding:.25rem .5rem;
+}
+.loupe-close:hover { color:var(--fg); border-color:var(--line-hi); }
+textarea {
+  background:var(--sunk); border:1px solid var(--line); border-radius:2px; color:var(--fg);
+  padding:.45rem .6rem; font:inherit; font-size:.86rem; width:100%; resize:vertical; min-height:4.5rem;
+}
+textarea:focus { border-color:var(--accent-dim); outline:none; }
+.pick-row { display:flex; gap:.5rem; }
+.pick-row .btn { flex:1; text-align:center; }
+
+/* ── Visibility group, kept apart from the Save action ───── */
+.vis {
+  display:inline-flex; align-items:center; gap:.6rem; padding:.3rem .6rem .3rem .55rem;
+  border:1px solid var(--line); border-radius:2px; background:var(--sunk);
+}
+.vis .vis-label { font-family:var(--mono); font-size:.55rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.divider { width:1px; height:1.7rem; background:var(--line); }
+
+.zoom { display:inline-flex; align-items:center; gap:.25rem; }
+.zoom button {
+  font-family:var(--mono); font-size:.85rem; line-height:1; width:1.7rem; height:1.7rem;
+  border:1px solid var(--line-hi); border-radius:2px; color:var(--dim);
+}
+.zoom button:hover:not(:disabled) { border-color:var(--dim); color:var(--fg); }
+.zoom button:disabled { opacity:.3; cursor:default; }
+
+.state { grid-column:1/-1; padding:3.5rem 0; text-align:center; display:flex; flex-direction:column; gap:.6rem; align-items:center; }
+.state p { color:var(--faint); }
+.state .big { font-family:var(--serif); font-size:1.25rem; color:var(--dim); }
+
+/* ── Footer ──────────────────────────────────────────────── */
+footer {
+  position:absolute; bottom:0; left:264px; right:0; background:rgba(11,12,13,.94);
+  backdrop-filter:blur(8px); border-top:1px solid var(--line);
+  padding:.6rem 1.5rem; display:flex; align-items:center; justify-content:space-between; gap:1.5rem; flex-wrap:wrap;
+}
+.hints { display:flex; gap:1.15rem; flex-wrap:wrap; font-size:.72rem; color:var(--faint); }
+.hints span { display:inline-flex; align-items:center; gap:.35rem; }
+kbd {
+  font-family:var(--mono); font-size:.62rem; background:var(--sunk); border:1px solid var(--line-hi);
+  border-bottom-width:2px; border-radius:3px; padding:.1rem .32rem; color:var(--dim);
+}
+.err {
+  background:#2a1410; border:1px solid #7d3b22; color:#e0906d; border-radius:2px;
+  padding:.5rem .75rem; font-size:.78rem; margin-top:.5rem;
+}
+.saved { color:var(--accent); font-family:var(--mono); font-size:.65rem; letter-spacing:.1em; text-transform:uppercase; }
+.dirty { color:var(--warn); }
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <h1>Curate</h1>
+    <span class="sub" id="libpath">—</span>
+  </div>
+  <div class="alist">
+    <span class="label">Albums</span>
+    <div id="albums"></div>
+  </div>
+</aside>
+
+<main>
+  <header id="head" hidden>
+    <div class="hrow">
+      <div class="htitle">
+        <h2 id="h-title">—</h2>
+        <span class="record" id="h-rec"></span>
+      </div>
+      <div class="hactions">
+        <span class="zoom" title="Frame size">
+          <button id="zoom-out" aria-label="Smaller frames">−</button>
+          <button id="zoom-in" aria-label="Larger frames">+</button>
+        </span>
+        <button class="btn" id="only">Show selected</button>
+        <span class="divider"></span>
+        <span class="vis" title="Draft albums build locally so you can preview them, but are left out of the deployed site">
+          <span class="vis-label">Visibility</span>
+          <label class="toggle">
+            <input type="checkbox" id="f-published">
+            <span class="track"></span>
+            <span class="txt" id="pub-txt">Draft</span>
+          </label>
+        </span>
+        <button class="btn primary" id="save" disabled>Save</button>
+      </div>
+    </div>
+
+    <details class="meta-panel">
+      <summary class="label">Album details</summary>
+      <div class="fields">
+        <div class="field">
+          <label for="f-title">Title</label>
+          <input type="text" id="f-title" placeholder="Glacier National Park">
+          <span class="hint">Shown as the album heading</span>
+        </div>
+        <div class="field">
+          <label for="f-id">URL slug</label>
+          <input type="text" id="f-id" class="mono" placeholder="glacier-national-park">
+          <span class="hint">Avoid changing once links exist</span>
+        </div>
+        <div class="field">
+          <label for="f-region">Region</label>
+          <input type="text" id="f-region" placeholder="Montana">
+          <span class="hint">Optional, shown beside the date</span>
+        </div>
+        <div class="field wide">
+          <label for="f-intro">Intro</label>
+          <input type="text" id="f-intro" placeholder="A sentence or two at the head of the album">
+          <span class="hint">Optional</span>
+        </div>
+      </div>
+    </details>
+    <div class="err" id="err" hidden></div>
+  </header>
+
+  <div class="sheet" id="sheet">
+    <div class="state"><p class="big">Choose an album</p><p>Its frames appear here, dimmed until you select them.</p></div>
+  </div>
+</main>
+
+<footer>
+  <div class="hints">
+    <span><kbd>Click</kbd> select</span>
+    <span><kbd>Shift</kbd>+click a run</span>
+    <span><kbd>Double-click</kbd> caption it</span>
+    <span><kbd>C</kbd> cover</span>
+    <span><kbd>⌘S</kbd> save</span>
+  </div>
+  <span class="record" id="stat"></span>
+</footer>
+
+<div class="loupe" id="loupe" hidden>
+  <div class="loupe-img">
+    <button class="loupe-nav prev" id="lp-prev" aria-label="Previous frame">‹</button>
+    <img id="lp-img" alt="">
+    <button class="loupe-nav next" id="lp-next" aria-label="Next frame">›</button>
+  </div>
+  <div class="loupe-side">
+    <button class="loupe-close" id="lp-close">Esc ✕</button>
+    <div>
+      <span class="pos" id="lp-pos"></span>
+      <p class="fname" id="lp-file"></p>
+    </div>
+    <div class="pick-row">
+      <button class="btn" id="lp-toggle">Select</button>
+      <button class="btn" id="lp-cover">★ Cover</button>
+    </div>
+    <div class="field">
+      <label for="lp-title">Title</label>
+      <input type="text" id="lp-title" placeholder="Mountain Goat">
+      <span class="hint">Shown under the photo in the viewer</span>
+    </div>
+    <div class="field">
+      <label for="lp-note">Note</label>
+      <textarea id="lp-note" placeholder="Optional. A sentence about the frame."></textarea>
+    </div>
+    <p class="hint" style="color:var(--faint)">
+      Captions are saved with the album — close this and hit Save.
+    </p>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let albums = [], mbPer = .85, cur = null, files = [], dirty = false, onlySel = false, lastIdx = null;
+let tiles = new Map();
+let preDbl = null;   // selection snapshot taken before a possible double-click
+
+const ZOOMS = [150, 200, 260, 340, 440, 580];
+let zoom = Number(localStorage.getItem('curate-zoom') ?? 2);
+let targetH = ZOOMS[zoom];
+
+async function boot() {
+  const r = await (await fetch('/api/albums')).json();
+  albums = r.albums; mbPer = r.mbPerPhoto;
+  $('#libpath').textContent = r.library || '';
+  renderAlbums();
+}
+
+function renderAlbums() {
+  const box = $('#albums');
+  box.innerHTML = '';
+  if (!albums.length) {
+    box.innerHTML = '<p style="padding:.6rem 1.15rem;color:var(--faint);font-size:.8rem">No folders with images yet.</p>';
+    return;
+  }
+  for (const a of albums) {
+    const b = document.createElement('button');
+    b.className = 'alb' + (cur?.source === a.source ? ' on' : '');
+    const t = document.createElement('b');
+    t.textContent = a.title || a.source;
+    const m = document.createElement('span');
+    m.className = 'meta';
+    m.textContent = `${a.selected} of ${a.total}`;
+    if (a.selected && !a.published) { const d = document.createElement('span'); d.className='draft'; d.textContent=' · draft'; m.append(d); }
+    b.append(t, m);
+    b.onclick = () => open(a.source);
+    box.append(b);
+  }
+}
+
+async function open(source) {
+  if (dirty && !confirm('You have unsaved changes. Discard them?')) return;
+  const d = await (await fetch('/api/album?source=' + encodeURIComponent(source))).json();
+  cur = d.manifest; files = d.files; dirty = false; lastIdx = null;
+  $('#head').hidden = false;
+  $('#f-title').value = cur.title || '';
+  $('#f-id').value = cur.id || '';
+  $('#f-region').value = cur.region || '';
+  $('#f-intro').value = cur.intro || '';
+  $('#f-published').checked = cur.published;
+  syncPubLabel();
+  renderAlbums(); renderSheet();
+}
+
+const selected = () => files.filter(f => f.selected);
+
+function renderSheet() {
+  const sheet = $('#sheet');
+  const keepScroll = sheet.scrollTop;
+  tiles = new Map();
+  sheet.innerHTML = '';
+  const show = onlySel ? selected() : files;
+
+  if (!show.length) {
+    const s = document.createElement('div');
+    s.className = 'state';
+    s.innerHTML = onlySel
+      ? '<p class="big">Nothing selected</p><p>Switch back to all frames and pick some.</p>'
+      : '<p class="big">This folder is empty</p><p>Copy chosen exports into it, then reload.</p>';
+    sheet.append(s);
+    updateStat(); return;
+  }
+
+  const order = new Map(selected().map((f, i) => [f.file, i + 1]));
+  const GAP = 8;
+  const width = sheet.clientWidth - 48; // padding
+  const rows = justify(show, width, targetH, GAP);
+
+  for (const row of rows) {
+    const wrap = document.createElement('div');
+    wrap.className = 'row-wrap';
+
+    for (const item of row.items) {
+      const f = item.f;
+      const idx = files.indexOf(f);
+      const t = document.createElement('div');
+      t.className = 'tile' + (f.selected ? ' sel' : '') + (item.w < 130 ? ' narrow' : '');
+      t.style.width = item.w + 'px';
+      t.style.height = row.h + 'px';
+      t.tabIndex = 0;
+      t.setAttribute('role', 'button');
+      t.setAttribute('aria-pressed', String(f.selected));
+
+      const img = document.createElement('img');
+      img.loading = 'lazy'; img.alt = f.file;
+      img.src = `/api/thumb?source=${encodeURIComponent(cur.source)}&file=${encodeURIComponent(f.file)}`;
+      t.append(img);
+
+      const num = document.createElement('span');
+      num.className = 'num';
+      t.append(num);
+
+      const bar = document.createElement('div');
+      bar.className = 'bar';
+      const name = document.createElement('span');
+      name.className = 'fname'; name.textContent = f.file;
+      bar.append(name);
+      t.append(bar);
+
+      const tag = document.createElement('span');
+      tag.className = 'cover-tag'; tag.textContent = '★ COVER';
+      tag.title = 'Click to clear';
+      tag.onclick = (e) => { e.stopPropagation(); cur.cover = null; mark(); refreshSelection(); };
+      t.append(tag);
+
+      // Available on every frame, not just selected ones — you often know the
+      // cover before you have finished choosing.
+      const cb = document.createElement('button');
+      cb.className = 'setcov'; cb.textContent = '★ Cover';
+      cb.title = 'Use as album cover';
+      cb.onclick = (e) => {
+        e.stopPropagation();
+        f.selected = true;          // a cover must be published
+        cur.cover = f.file;
+        mark(); afterToggle();
+      };
+      t.append(cb);
+
+      // A double-click delivers two clicks before it, so opening the loupe
+      // costs two toggles. Selection survives that (it flips twice), but the
+      // cover does not — deselecting a frame clears it as a side effect, and
+      // reselecting cannot know to put it back. So snapshot before the first
+      // click and restore if the gesture turns out to be a double-click.
+      t.onclick = (e) => {
+        if (e.detail === 1) {
+          preDbl = { sel: files.map((x) => x.selected), cover: cur.cover, wasDirty: dirty };
+        }
+        toggle(idx, e.shiftKey);
+      };
+      t.ondblclick = (e) => {
+        e.preventDefault();
+        if (preDbl) {
+          files.forEach((x, i) => { x.selected = preDbl.sel[i]; });
+          cur.cover = preDbl.cover;
+          dirty = preDbl.wasDirty;
+          preDbl = null;
+          afterToggle();
+        }
+        openLoupe(idx);
+      };
+      t.onkeydown = (e) => {
+        if (e.key === ' ') { e.preventDefault(); toggle(idx, false); }
+        if (e.key === 'Enter') { e.preventDefault(); openLoupe(idx); }
+        if (e.key.toLowerCase() === 'c') { e.preventDefault(); f.selected = true; cur.cover = f.file; mark(); afterToggle(); }
+      };
+
+      tiles.set(f.file, { el: t, num });
+      wrap.append(t);
+    }
+    sheet.append(wrap);
+  }
+  refreshSelection();
+  sheet.scrollTop = keepScroll;
+}
+
+/**
+ * Patch selection state onto the existing DOM.
+ *
+ * Rebuilding the sheet on every click threw away the scroll position, which
+ * made an 80-frame album unusable. Selection never changes the layout, so it
+ * never needs a re-render — only class toggles and the running numbers.
+ */
+function refreshSelection() {
+  const order = new Map(selected().map((f, i) => [f.file, i + 1]));
+  for (const f of files) {
+    const t = tiles.get(f.file);
+    if (!t) continue;
+    t.el.classList.toggle('sel', f.selected);
+    t.el.classList.toggle('is-cover', cur.cover === f.file);
+    t.el.setAttribute('aria-pressed', String(f.selected));
+    const n = order.get(f.file);
+    if (n !== undefined) t.num.textContent = String(n);
+  }
+  updateStat();
+}
+
+/** "Show selected" changes which frames are laid out; everything else does not. */
+function afterToggle() {
+  if (onlySel) renderSheet();
+  else refreshSelection();
+}
+
+/**
+ * Pack frames into rows that fill the width at roughly `target` height.
+ * A row is closed once its natural width reaches the container, then every
+ * frame in it is scaled to the exact height that makes the row fit.
+ */
+function justify(items, width, target, gap) {
+  const rows = [];
+  let row = [], sum = 0;
+
+  for (const f of items) {
+    const ar = f.ar || 1.5;
+    row.push({ f, ar });
+    sum += ar;
+    if (sum * target + (row.length - 1) * gap >= width) {
+      rows.push({ items: row, sum, full: true });
+      row = []; sum = 0;
+    }
+  }
+  if (row.length) rows.push({ items: row, sum, full: false });
+
+  return rows.map((r) => {
+    const avail = width - (r.items.length - 1) * gap;
+    // a short trailing row keeps the target height rather than ballooning
+    const h = r.full ? avail / r.sum : Math.min(target, avail / r.sum);
+    return { h, items: r.items.map((it) => ({ f: it.f, w: it.ar * h })) };
+  });
+}
+
+function toggle(idx, range) {
+  if (range && lastIdx !== null) {
+    const [a, b] = [Math.min(lastIdx, idx), Math.max(lastIdx, idx)];
+    const want = !files[idx].selected;
+    for (let i = a; i <= b; i++) files[i].selected = want;
+  } else {
+    files[idx].selected = !files[idx].selected;
+  }
+  if (cur.cover && !files.find(f => f.file === cur.cover)?.selected) cur.cover = null;
+  lastIdx = idx;
+  mark(); afterToggle();
+}
+
+function syncPubLabel() {
+  const on = $('#f-published').checked;
+  $('#pub-txt').textContent = on ? 'Published' : 'Draft';
+}
+
+function updateStat() {
+  const n = selected().length;
+  $('#h-rec').textContent = `${n} of ${files.length} selected · ≈${(n * mbPer).toFixed(0)} MB`;
+  $('#stat').innerHTML = dirty ? '<span class="dirty">Unsaved changes</span>' : '';
+  $('#save').disabled = !dirty;
+}
+function mark() { dirty = true; updateStat(); }
+
+for (const id of ['f-title','f-id','f-region','f-intro']) $('#' + id).addEventListener('input', mark);
+$('#f-published').addEventListener('change', () => { syncPubLabel(); mark(); });
+$('#only').onclick = () => { onlySel = !onlySel; $('#only').classList.toggle('on', onlySel); $('#only').textContent = onlySel ? 'Show all' : 'Show selected'; renderSheet(); };
+
+async function save() {
+  commitLoupe();
+  $('#err').hidden = true;
+  const body = {
+    id: $('#f-id').value.trim() || cur.id,
+    source: cur.source,
+    title: $('#f-title').value.trim(),
+    region: $('#f-region').value.trim(),
+    intro: $('#f-intro').value.trim(),
+    published: $('#f-published').checked,
+    cover: cur.cover,
+    photos: selected().map(f => ({ file: f.file, title: f.title || null, note: f.note || null })),
+  };
+  const res = await fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  const out = await res.json();
+  if (!res.ok) {
+    $('#err').hidden = false;
+    $('#err').textContent = (out.errors || [out.error]).join(' · ');
+    return;
+  }
+  dirty = false;
+  Object.assign(cur, { id: body.id, title: body.title, published: body.published });
+  const a = albums.find(x => x.source === cur.source);
+  if (a) Object.assign(a, { selected: out.count, title: body.title, published: body.published, id: body.id });
+  renderAlbums(); updateStat();
+  $('#stat').innerHTML = '<span class="saved">Saved to ' + out.path + '</span>';
+  setTimeout(() => { if (!dirty) updateStat(); }, 2600);
+}
+
+/* ── Loupe ─────────────────────────────────────────────────
+   A larger view of one frame with its caption fields, so titles can be
+   written while actually looking at the photograph. Arrow keys walk the
+   album, which makes captioning a run of frames quick. */
+let lpIdx = null;
+
+function openLoupe(idx) {
+  lpIdx = idx;
+  const f = files[idx];
+  $('#loupe').hidden = false;
+  $('#lp-img').src = `/api/thumb?size=1400&source=${encodeURIComponent(cur.source)}&file=${encodeURIComponent(f.file)}`;
+  $('#lp-img').alt = f.file;
+  $('#lp-file').textContent = f.file;
+  $('#lp-pos').textContent = `${idx + 1} of ${files.length}`;
+  $('#lp-title').value = f.title || '';
+  $('#lp-note').value = f.note || '';
+  $('#lp-prev').disabled = idx === 0;
+  $('#lp-next').disabled = idx === files.length - 1;
+  $('#lp-toggle').textContent = f.selected ? 'Deselect' : 'Select';
+  $('#lp-toggle').classList.toggle('on', f.selected);
+  $('#lp-cover').classList.toggle('on', cur.cover === f.file);
+  $('#lp-title').focus();
+}
+
+function closeLoupe() { commitLoupe(); $('#loupe').hidden = true; lpIdx = null; }
+
+/** Copy the caption fields back onto the file record. */
+function commitLoupe() {
+  if (lpIdx === null) return;
+  const f = files[lpIdx];
+  const title = $('#lp-title').value.trim() || null;
+  const note = $('#lp-note').value.trim() || null;
+  if (f.title !== title || f.note !== note) { f.title = title; f.note = note; mark(); }
+}
+
+function stepLoupe(d) {
+  commitLoupe();
+  const next = lpIdx + d;
+  if (next >= 0 && next < files.length) openLoupe(next);
+}
+
+$('#lp-close').onclick = closeLoupe;
+$('#lp-prev').onclick = () => stepLoupe(-1);
+$('#lp-next').onclick = () => stepLoupe(1);
+$('#lp-toggle').onclick = () => {
+  const f = files[lpIdx];
+  f.selected = !f.selected;
+  if (!f.selected && cur.cover === f.file) cur.cover = null;
+  mark(); afterToggle(); openLoupe(lpIdx);
+};
+$('#lp-cover').onclick = () => {
+  const f = files[lpIdx];
+  f.selected = true; cur.cover = f.file;
+  mark(); afterToggle(); openLoupe(lpIdx);
+};
+
+function setZoom(next) {
+  zoom = Math.max(0, Math.min(ZOOMS.length - 1, next));
+  targetH = ZOOMS[zoom];
+  localStorage.setItem('curate-zoom', String(zoom));
+  $('#zoom-out').disabled = zoom === 0;
+  $('#zoom-in').disabled = zoom === ZOOMS.length - 1;
+  if (cur) renderSheet();
+}
+$('#zoom-in').onclick = () => setZoom(zoom + 1);
+$('#zoom-out').onclick = () => setZoom(zoom - 1);
+setZoom(zoom);
+
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (cur) renderSheet(); }, 120);
+});
+
+$('#save').onclick = save;
+addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); commitLoupe(); if (dirty) save(); return; }
+
+  if (lpIdx !== null) {
+    if (e.key === 'Escape') { e.preventDefault(); closeLoupe(); return; }
+    // arrows only step frames when not typing a caption
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepLoupe(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); stepLoupe(1); }
+    return;
+  }
+
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(zoom + 1); }
+  if (e.key === '-' || e.key === '_') { e.preventDefault(); setZoom(zoom - 1); }
+});
+addEventListener('beforeunload', (e) => { if (dirty) e.preventDefault(); });
+
+boot();
+</script>
+</body>
+</html>
