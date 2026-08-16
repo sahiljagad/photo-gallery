@@ -24,7 +24,7 @@ export function watchPhotos() {
     building = true;
     console.log('\n[watch] Change detected, rebuilding...');
     try {
-      await build();
+      await build({ includeDrafts: true });   // local preview shows drafts
       console.log('[watch] Done. Watching for changes...');
     } catch (err) {
       console.error('[watch] Build error:', err);

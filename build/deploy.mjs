@@ -6,6 +6,7 @@
 import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { build } from './build.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -25,9 +26,17 @@ function getBasePath() {
   }
 }
 
-function run() {
+async function run() {
   const base = getBasePath();
   console.log(`Base path: ${base}`);
+
+  // Rebuild without drafts. This is the only guarantee that a draft album's
+  // derivatives are absent from dist/ — pruneOrphans deletes anything not in
+  // the published set, so a previously previewed draft cannot ride along.
+  console.log('\nRebuilding published albums only...');
+  const archive = await build({ includeDrafts: false });
+  const total = archive.reduce((n, a) => n + a.photos.length, 0);
+  console.log(`Publishing ${archive.length} album(s), ${total} photograph(s).`);
 
   // Build with the correct base
   console.log('\nBuilding...');
@@ -58,4 +67,4 @@ function run() {
   console.log('\nDeployed to gh-pages.');
 }
 
-run();
+run().catch((e) => { console.error(e.message); process.exit(1); });
