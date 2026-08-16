@@ -205,10 +205,33 @@ const server = createServer(async (req, res) => {
   }
 });
 
-const cfg = await loadConfig();
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  Curate — http://127.0.0.1:${PORT}`);
-  console.log(`  Library: ${cfg.library}`);
-  if (cfg.ignore?.length) console.log(`  Hidden:  ${cfg.ignore.join(', ')}`);
-  console.log(`\n  Writes album manifests only. Never uploads, never deploys.\n`);
-});
+/**
+ * Start the curation server.
+ * @param {object} opts
+ * @param {boolean} opts.quiet — suppress the banner when another process
+ *   (studio) is printing a combined one.
+ * @returns {Promise<{port: number, library: string}>}
+ */
+export async function startCurate({ quiet = false } = {}) {
+  const cfg = await loadConfig();
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(PORT, '127.0.0.1', resolve);
+  });
+
+  if (!quiet) {
+    console.log(`\n  Curate — http://127.0.0.1:${PORT}`);
+    console.log(`  Library: ${cfg.library}`);
+    if (cfg.ignore?.length) console.log(`  Hidden:  ${cfg.ignore.join(', ')}`);
+    console.log(`\n  Writes album manifests only. Never uploads, never deploys.\n`);
+  }
+  return { port: PORT, library: cfg.library };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  startCurate().catch((err) => {
+    console.error(err.message);
+    process.exit(1);
+  });
+}
