@@ -11,7 +11,8 @@
  * never written to photos.json, and never deployed. Absence, not a flag.
  */
 
-import { mkdir, readFile, writeFile, rm, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, readdir, stat, link, unlink } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, parse } from 'node:path';
 import sharp from 'sharp';
@@ -27,8 +28,19 @@ import { readMetadata } from './exif.mjs';
 import { photoPath, listSourceFiles, loadConfig } from './library.mjs';
 import { readAllManifests, validateManifest, selectedPhotos } from './albums.mjs';
 
-const PUBLIC_DIR = join(import.meta.dirname, '..', 'public');
+const ROOT = join(import.meta.dirname, '..');
+const PUBLIC_DIR = join(ROOT, 'public');
 const IMG_DIR = join(PUBLIC_DIR, 'img');
+
+/**
+ * Derivatives are generated here under readable names, then hard-linked into
+ * public/img under a content hash. Two names, one inode — no disk cost.
+ *
+ * The readable copy is what makes generation incremental: we can ask "is this
+ * output newer than its source?" before doing any work, which a hash-named
+ * file cannot answer since you must generate it to learn its name.
+ */
+const CACHE_DIR = join(ROOT, '.cache', 'img');
 const WIDTHS = [640, 1080, 1600, 2200];
 
 // Particles to keep lowercase in title-case
@@ -103,7 +115,7 @@ async function processImage(albumId, source, file, exif) {
   const srcPath = await photoPath(source, file);
   const srcStat = await stat(srcPath);
   const photoId = parse(file).name;
-  const outDir = join(IMG_DIR, albumId);
+  const outDir = join(CACHE_DIR, albumId);
   await mkdir(outDir, { recursive: true });
 
   const meta = await sharp(srcPath).metadata();
@@ -138,8 +150,8 @@ async function processImage(albumId, source, file, exif) {
     sizes.push({
       width: w,
       height: h,
-      src: `img/${albumId}/${photoId}-${w}.jpg`,
-      srcWebp: `img/${albumId}/${photoId}-${w}.webp`,
+      src: await publishAsset(jpgPath, 'jpg'),
+      srcWebp: await publishAsset(webpPath, 'webp'),
     });
   }
 
@@ -171,6 +183,32 @@ async function processImage(albumId, source, file, exif) {
   };
 }
 
+/**
+ * Hash a generated file and hard-link it into public/img under that hash.
+ *
+ * The key is derived from the bytes, so an identical file always lands on the
+ * same name. That buys three things: an unchanged photograph produces an
+ * unchanged URL (so upload can skip it), a changed photograph produces a
+ * different URL (so no cache can serve stale bytes), and the URL can therefore
+ * be marked immutable and cached for a year.
+ */
+async function publishAsset(cachePath, ext) {
+  const bytes = await readFile(cachePath);
+  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+  const name = `${hash}.${ext}`;
+  const dest = join(IMG_DIR, name);
+
+  if (!existsSync(dest)) {
+    await mkdir(IMG_DIR, { recursive: true });
+    try {
+      await link(cachePath, dest);
+    } catch {
+      await writeFile(dest, bytes);   // different filesystem — fall back to a copy
+    }
+  }
+  return `img/${name}`;
+}
+
 /** Earliest and latest capture dates in an album, as YYYY-MM-DD. */
 function captureRange(photos) {
   const stamps = photos.map((p) => p.shot?.takenAt).filter(Boolean).sort();
@@ -197,32 +235,53 @@ function chronological(photos) {
  * privacy leak, not clutter.
  */
 async function pruneOrphans(archive) {
-  if (!existsSync(IMG_DIR)) return { dirs: 0, files: 0 };
+  if (!existsSync(IMG_DIR)) return { files: 0 };
 
-  const keepDirs = new Set(archive.map((a) => a.id));
-  const keepFiles = new Set();
+  const keep = new Set();
   for (const album of archive) {
     for (const p of album.photos) {
-      for (const s of p.sizes) { keepFiles.add(s.src); keepFiles.add(s.srcWebp); }
+      for (const s of p.sizes) { keep.add(s.src); keep.add(s.srcWebp); }
     }
   }
 
-  let dirs = 0, files = 0;
+  let files = 0;
   for (const entry of await readdir(IMG_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    if (!keepDirs.has(entry.name)) {
+    // album folders from the pre-hash layout
+    if (entry.isDirectory()) {
       await rm(join(IMG_DIR, entry.name), { recursive: true, force: true });
-      dirs++;
       continue;
     }
-    for (const f of await readdir(join(IMG_DIR, entry.name))) {
-      if (!keepFiles.has(`img/${entry.name}/${f}`)) {
-        await rm(join(IMG_DIR, entry.name, f), { force: true });
-        files++;
-      }
+    if (!keep.has(`img/${entry.name}`)) {
+      await unlink(join(IMG_DIR, entry.name));
+      files++;
     }
   }
-  return { dirs, files };
+  return { files };
+}
+
+/**
+ * Tell the CDN these files never change.
+ *
+ * Only safe because the filename is a hash of the contents: an edit produces a
+ * different name, so no cache can ever hold bytes that have gone stale. The
+ * HTML and photos.json must NOT be immutable — those keep their names and do
+ * change.
+ */
+async function writeHeaders() {
+  await writeFile(join(PUBLIC_DIR, '_headers'),
+`# Generated by build.mjs — do not edit.
+# Hash-named assets can never change under a given name.
+/img/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# These keep stable names, so they must revalidate.
+/photos.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+`);
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -320,9 +379,8 @@ export async function build({ includeDrafts = false } = {}) {
   archive.sort((a, b) => b.date.localeCompare(a.date));
 
   const pruned = await pruneOrphans(archive);
-  if (pruned.dirs || pruned.files) {
-    console.log(`\n🧹 Removed ${pruned.dirs} album folder(s) and ${pruned.files} orphaned file(s)`);
-  }
+  if (pruned.files) console.log(`\n🧹 Removed ${pruned.files} orphaned asset(s)`);
+  await writeHeaders();
 
   if (archive[0]) {
     const c = archive[0].cover;

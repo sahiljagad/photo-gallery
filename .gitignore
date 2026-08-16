@@ -8,3 +8,5 @@ public/og-image.jpg
 photos.config.json
 .thumbs/
 .vite/
+.cache/
+public/_headers
