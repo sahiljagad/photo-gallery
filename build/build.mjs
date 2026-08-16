@@ -78,7 +78,28 @@ function titleFromFilename(filename) {
  * Generate derivatives and measurements for one photograph.
  * Incremental: an output newer than its source is left alone.
  */
-async function processImage(albumId, source, file) {
+/**
+ * Copyright to stamp on every derivative.
+ *
+ * Set explicitly rather than copying the source's metadata forward. The
+ * originals carry a camera serial number (and would carry GPS if these bodies
+ * had a receiver), which is a fingerprint linking every photograph you publish
+ * anywhere back to one camera. Copying metadata wholesale would leak it;
+ * writing only these two fields does not.
+ *
+ * This does not stop anyone taking an image. It establishes authorship, and
+ * removing it is itself unlawful in several jurisdictions.
+ */
+function exifFor(config) {
+  const c = config.copyright;
+  if (!c?.creator && !c?.notice) return undefined;
+  const IFD0 = {};
+  if (c.notice) IFD0.Copyright = c.notice;
+  if (c.creator) IFD0.Artist = c.creator;
+  return { IFD0 };
+}
+
+async function processImage(albumId, source, file, exif) {
   const srcPath = await photoPath(source, file);
   const srcStat = await stat(srcPath);
   const photoId = parse(file).name;
@@ -103,12 +124,15 @@ async function processImage(albumId, source, file) {
     const fresh = async (p) => existsSync(p) && (await stat(p)).mtimeMs > srcStat.mtimeMs;
 
     if (!(await fresh(webpPath))) {
-      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80 }).toFile(webpPath);
+      let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 });
+      if (exif) pipe = pipe.withExif(exif);
+      await pipe.toFile(webpPath);
     }
     if (!(await fresh(jpgPath))) {
-      await sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 85, progressive: true }).toFile(jpgPath);
+      let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, progressive: true });
+      if (exif) pipe = pipe.withExif(exif);
+      await pipe.toFile(jpgPath);
     }
 
     sizes.push({
@@ -210,7 +234,9 @@ async function pruneOrphans(archive) {
  */
 export async function build({ includeDrafts = false } = {}) {
   const startTime = Date.now();
-  await loadConfig();
+  const config = await loadConfig();
+  const exif = exifFor(config);
+  if (exif) console.log(`   stamping: ${exif.IFD0.Copyright ?? exif.IFD0.Artist}`);
 
   const all = await readAllManifests();
   if (all.length === 0) {
@@ -248,7 +274,7 @@ export async function build({ includeDrafts = false } = {}) {
     const photos = [];
     for (const entry of chosen) {
       process.stdout.write(`  ${entry.file}...`);
-      const photo = await processImage(manifest.id, manifest.source, entry.file);
+      const photo = await processImage(manifest.id, manifest.source, entry.file, exif);
 
       // Manifest captions win; the filename is only a fallback
       const fromName = titleFromFilename(entry.file);
