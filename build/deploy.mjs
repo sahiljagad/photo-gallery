@@ -80,10 +80,45 @@ Nothing has been uploaded. dist/ is built and ready.`);
     return;
   }
 
-  console.log('\nUploading to Cloudflare Pages...\n');
-  execSync(`npx wrangler pages deploy dist --project-name=${project} --commit-dirty=true`, {
-    cwd: ROOT, stdio: 'inherit',
-  });
+  await upload(project);
+}
+
+/**
+ * Upload, retrying on network failure.
+ *
+ * Wrangler uploads many files concurrently and the connection tends to drop
+ * with EPIPE partway through a large batch — reliably somewhere past three
+ * hundred files, regardless of how big the payload is. Every attempt keeps its
+ * progress though, because Pages deduplicates by content hash and skips what
+ * it already has. So the fix is simply to keep going: each pass starts from
+ * where the last one died, and the run is idempotent by construction.
+ */
+async function upload(project, attempts = 8) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    console.log(`\nUploading to Cloudflare Pages${attempt > 1 ? ` — attempt ${attempt}/${attempts}` : ''}...\n`);
+
+    const result = spawnSync(
+      'npx',
+      ['wrangler', 'pages', 'deploy', 'dist', `--project-name=${project}`, '--commit-dirty=true'],
+      { cwd: ROOT, stdio: 'inherit' },
+    );
+
+    if (result.status === 0) {
+      console.log('\n✅ Deployed.');
+      return;
+    }
+
+    if (attempt === attempts) {
+      throw new Error(
+        `Upload failed after ${attempts} attempts. Files already uploaded are kept, ` +
+        'so running `npm run deploy` again will resume rather than start over.',
+      );
+    }
+
+    const wait = Math.min(5 + attempt * 3, 20);
+    console.log(`\n   connection dropped — resuming in ${wait}s (uploaded files are kept)`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
+  }
 }
 
 run().catch((err) => {
