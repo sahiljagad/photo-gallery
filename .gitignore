@@ -5,3 +5,6 @@ public/img/
 public/photos.json
 public/og-image.jpg
 *.DS_Store
+photos.config.json
+.thumbs/
+.vite/
