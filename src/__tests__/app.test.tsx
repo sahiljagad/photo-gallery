@@ -178,16 +178,27 @@ describe('Gallery', () => {
 });
 
 describe('Archive data', () => {
-  it('every photo has WebP and JPEG sizes', () => {
+  it('every size has a loadable src and sane dimensions', () => {
     for (const album of archive) {
       for (const photo of album.photos) {
         expect(photo.sizes.length).toBeGreaterThan(0);
         for (const size of photo.sizes) {
-          expect(size.src).toMatch(/\.jpg$/);
-          expect(size.srcWebp).toMatch(/\.webp$/);
+          // `src` is what a plain <img> loads, so it must always resolve.
+          // `srcWebp` is the <source> and may be absent at a given width.
+          expect(size.src).toMatch(/\.(jpg|webp)$/);
+          if (size.srcWebp) expect(size.srcWebp).toMatch(/\.webp$/);
           expect(size.width).toBeGreaterThan(0);
           expect(size.height).toBeGreaterThan(0);
         }
+      }
+    }
+  });
+
+  it('the smallest width keeps a JPEG, so <picture> degrades to a real image', () => {
+    for (const album of archive) {
+      for (const photo of album.photos) {
+        const smallest = photo.sizes[0];
+        expect(smallest.src, `${photo.id} has no JPEG fallback`).toMatch(/\.jpg$/);
       }
     }
   });
@@ -197,10 +208,11 @@ describe('Archive data', () => {
       for (const photo of album.photos) {
         const srcs = new Map<string, number>();
         for (const size of photo.sizes) {
-          if (srcs.has(size.src)) expect(srcs.get(size.src)).toBe(size.width);
-          srcs.set(size.src, size.width);
-          if (srcs.has(size.srcWebp)) expect(srcs.get(size.srcWebp)).toBe(size.width);
-          srcs.set(size.srcWebp, size.width);
+          for (const file of [size.src, size.srcWebp]) {
+            if (!file) continue;
+            if (srcs.has(file)) expect(srcs.get(file)).toBe(size.width);
+            srcs.set(file, size.width);
+          }
         }
       }
     }

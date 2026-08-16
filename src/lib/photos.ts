@@ -124,7 +124,11 @@ export function toSlide(photo: Photo, album?: Album) {
 
 /** Build srcSet string for a given format. */
 export function buildSrcSet(photo: Photo, format: 'webp' | 'jpg'): string {
+  // A width may offer only one format now, so skip the ones it lacks rather
+  // than emitting `undefined` into the srcset.
   return photo.sizes
-    .map((s) => `${imgUrl(format === 'webp' ? s.srcWebp : s.src)} ${s.width}w`)
+    .map((s) => (format === 'webp' ? s.srcWebp : s.src.endsWith('.jpg') ? s.src : null))
+    .map((src, i) => (src ? `${imgUrl(src)} ${photo.sizes[i].width}w` : null))
+    .filter(Boolean)
     .join(', ');
 }

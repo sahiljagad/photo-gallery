@@ -1,8 +1,10 @@
 export interface PhotoSize {
   width: number;
   height: number;
+  /** What a plain <img> loads. Always present. */
   src: string;
-  srcWebp: string;
+  /** The WebP <source>. Absent at widths where only one format was generated. */
+  srcWebp?: string;
 }
 
 /** Capture details read from EXIF/XMP at build time. */

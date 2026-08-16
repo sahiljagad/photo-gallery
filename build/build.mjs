@@ -43,6 +43,20 @@ const IMG_DIR = join(PUBLIC_DIR, 'img');
 const CACHE_DIR = join(ROOT, '.cache', 'img');
 const WIDTHS = [640, 1080, 1600, 2200];
 
+/**
+ * Which widths get which format.
+ *
+ * WebP at every size, JPEG only at the smallest. JPEG is roughly 55% larger
+ * for the same quality and serves the sliver of browsers predating Safari 14
+ * (2020) — on this archive that was 422 MB of a 696 MB payload, which is what
+ * made the upload fail. The one small JPEG keeps <picture> degrading to a real
+ * image rather than a broken one.
+ *
+ * Override per project in photos.config.json:
+ *   "formats": { "webp": [640,1080,1600,2200], "jpg": [640] }
+ */
+const DEFAULT_FORMATS = { webp: WIDTHS, jpg: [640] };
+
 // Particles to keep lowercase in title-case
 const PARTICLES = new Set([
   'da', 'de', 'do', 'das', 'dos', 'e', 'a', 'o', 'em', 'no', 'na',
@@ -111,7 +125,7 @@ function exifFor(config) {
   return { IFD0 };
 }
 
-async function processImage(albumId, source, file, exif) {
+async function processImage(albumId, source, file, exif, formats) {
   const srcPath = await photoPath(source, file);
   const srcStat = await stat(srcPath);
   const photoId = parse(file).name;
@@ -128,6 +142,12 @@ async function processImage(albumId, source, file, exif) {
   const targets = WIDTHS.filter((w) => w <= masterW);
   if (targets.length === 0) targets.push(masterW);
 
+  const wantWebp = new Set(formats.webp ?? WIDTHS);
+  const wantJpg = new Set(formats.jpg ?? [640]);
+  // The smallest available width always gets a JPEG: it is the <img> fallback,
+  // and a <picture> whose fallback is itself WebP degrades to nothing.
+  wantJpg.add(targets[0]);
+
   for (const w of targets) {
     const h = Math.round(w / ar);
     const webpPath = join(outDir, `${photoId}-${w}.webp`);
@@ -135,24 +155,30 @@ async function processImage(albumId, source, file, exif) {
 
     const fresh = async (p) => existsSync(p) && (await stat(p)).mtimeMs > srcStat.mtimeMs;
 
-    if (!(await fresh(webpPath))) {
-      let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 });
-      if (exif) pipe = pipe.withExif(exif);
-      await pipe.toFile(webpPath);
-    }
-    if (!(await fresh(jpgPath))) {
-      let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 85, progressive: true });
-      if (exif) pipe = pipe.withExif(exif);
-      await pipe.toFile(jpgPath);
+    const entry = { width: w, height: h };
+
+    if (wantWebp.has(w)) {
+      if (!(await fresh(webpPath))) {
+        let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 });
+        if (exif) pipe = pipe.withExif(exif);
+        await pipe.toFile(webpPath);
+      }
+      entry.srcWebp = await publishAsset(webpPath, 'webp');
     }
 
-    sizes.push({
-      width: w,
-      height: h,
-      src: await publishAsset(jpgPath, 'jpg'),
-      srcWebp: await publishAsset(webpPath, 'webp'),
-    });
+    if (wantJpg.has(w)) {
+      if (!(await fresh(jpgPath))) {
+        let pipe = sharp(srcPath).resize(w, h, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 85, progressive: true });
+        if (exif) pipe = pipe.withExif(exif);
+        await pipe.toFile(jpgPath);
+      }
+      entry.src = await publishAsset(jpgPath, 'jpg');
+    }
+
+    // `src` is what a plain <img> loads, so it must always resolve
+    if (!entry.src) entry.src = entry.srcWebp;
+    sizes.push(entry);
   }
 
   // LQIP: 20px wide, blurred, inlined so it paints with the JSON
@@ -295,6 +321,7 @@ export async function build({ includeDrafts = false } = {}) {
   const startTime = Date.now();
   const config = await loadConfig();
   const exif = exifFor(config);
+  const formats = config.formats ?? DEFAULT_FORMATS;
   if (exif) console.log(`   stamping: ${exif.IFD0.Copyright ?? exif.IFD0.Artist}`);
 
   const all = await readAllManifests();
@@ -333,7 +360,7 @@ export async function build({ includeDrafts = false } = {}) {
     const photos = [];
     for (const entry of chosen) {
       process.stdout.write(`  ${entry.file}...`);
-      const photo = await processImage(manifest.id, manifest.source, entry.file, exif);
+      const photo = await processImage(manifest.id, manifest.source, entry.file, exif, formats);
 
       // Manifest captions win; the filename is only a fallback
       const fromName = titleFromFilename(entry.file);
