@@ -207,12 +207,18 @@ textarea:focus { border-color:var(--accent-dim); outline:none; }
 .pick-row { display:flex; gap:.5rem; }
 .pick-row .btn { flex:1; text-align:center; }
 
-/* ── Visibility group, kept apart from the Save action ───── */
-.vis {
-  display:inline-flex; align-items:center; gap:.6rem; padding:.3rem .6rem .3rem .55rem;
-  border:1px solid var(--line); border-radius:2px; background:var(--sunk);
+/* ── Visibility ───────────────────────────────────────────
+   A segmented control rather than a toggle. A toggle shows only the state
+   you are in, so you have to guess what flipping it does; both options
+   visible removes the guess entirely. */
+.seg { display:inline-flex; border:1px solid var(--line-hi); border-radius:2px; overflow:hidden; }
+.seg-btn {
+  font-family:var(--mono); font-size:.63rem; letter-spacing:.1em; text-transform:uppercase;
+  padding:.42rem .75rem; color:var(--faint); background:var(--sunk); transition:all var(--t);
 }
-.vis .vis-label { font-family:var(--mono); font-size:.55rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.seg-btn + .seg-btn { border-left:1px solid var(--line-hi); }
+.seg-btn:hover:not(.on) { color:var(--dim); background:#171d1e; }
+.seg-btn.on { background:var(--accent); color:var(--on-accent); font-weight:600; }
 .divider { width:1px; height:1.7rem; background:var(--line); }
 
 .zoom { display:inline-flex; align-items:center; gap:.25rem; }
@@ -275,13 +281,11 @@ kbd {
         </span>
         <button class="btn" id="only">Show selected</button>
         <span class="divider"></span>
-        <span class="vis" title="Draft albums build locally so you can preview them, but are left out of the deployed site">
-          <span class="vis-label">Visibility</span>
-          <label class="toggle">
-            <input type="checkbox" id="f-published">
-            <span class="track"></span>
-            <span class="txt" id="pub-txt">Draft</span>
-          </label>
+        <span class="seg" role="group" aria-label="Album visibility">
+          <button type="button" class="seg-btn on" id="seg-draft"
+                  title="Builds locally so you can preview it. Left out of deploys.">Draft</button>
+          <button type="button" class="seg-btn" id="seg-pub"
+                  title="Goes live the next time you run npm run deploy.">Published</button>
         </span>
         <button class="btn primary" id="save" disabled>Save</button>
       </div>
@@ -327,6 +331,7 @@ kbd {
     <span><kbd>Double-click</kbd> caption it</span>
     <span><kbd>C</kbd> cover</span>
     <span><kbd>⌘S</kbd> save</span>
+    <span style="color:var(--faint)">preview with <kbd>npm run studio</kbd></span>
   </div>
   <span class="record" id="stat"></span>
 </footer>
@@ -367,6 +372,7 @@ const $ = (s) => document.querySelector(s);
 let albums = [], mbPer = .85, cur = null, files = [], dirty = false, onlySel = false, lastIdx = null;
 let tiles = new Map();
 let preDbl = null;   // selection snapshot taken before a possible double-click
+let published = false;
 
 const ZOOMS = [150, 200, 260, 340, 440, 580];
 let zoom = Number(localStorage.getItem('curate-zoom') ?? 2);
@@ -410,8 +416,7 @@ async function open(source) {
   $('#f-id').value = cur.id || '';
   $('#f-region').value = cur.region || '';
   $('#f-intro').value = cur.intro || '';
-  $('#f-published').checked = cur.published;
-  syncPubLabel();
+  setPublished(cur.published, false);
   renderAlbums(); renderSheet();
 }
 
@@ -594,10 +599,16 @@ function toggle(idx, range) {
   mark(); afterToggle();
 }
 
-function syncPubLabel() {
-  const on = $('#f-published').checked;
-  $('#pub-txt').textContent = on ? 'Published' : 'Draft';
+function setPublished(v, markDirty = true) {
+  published = v;
+  $('#seg-draft').classList.toggle('on', !v);
+  $('#seg-pub').classList.toggle('on', v);
+  $('#seg-draft').setAttribute('aria-pressed', String(!v));
+  $('#seg-pub').setAttribute('aria-pressed', String(v));
+  if (markDirty) mark();
 }
+$('#seg-draft').onclick = () => { if (published) setPublished(false); };
+$('#seg-pub').onclick   = () => { if (!published) setPublished(true); };
 
 function updateStat() {
   const n = selected().length;
@@ -608,7 +619,6 @@ function updateStat() {
 function mark() { dirty = true; updateStat(); }
 
 for (const id of ['f-title','f-id','f-region','f-intro']) $('#' + id).addEventListener('input', mark);
-$('#f-published').addEventListener('change', () => { syncPubLabel(); mark(); });
 $('#only').onclick = () => { onlySel = !onlySel; $('#only').classList.toggle('on', onlySel); $('#only').textContent = onlySel ? 'Show all' : 'Show selected'; renderSheet(); };
 
 async function save() {
@@ -620,7 +630,7 @@ async function save() {
     title: $('#f-title').value.trim(),
     region: $('#f-region').value.trim(),
     intro: $('#f-intro').value.trim(),
-    published: $('#f-published').checked,
+    published,
     cover: cur.cover,
     photos: selected().map(f => ({ file: f.file, title: f.title || null, note: f.note || null })),
   };
