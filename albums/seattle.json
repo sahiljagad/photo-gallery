@@ -4,7 +4,26 @@
   "title": "Seattle Aurora",
   "region": "Washington",
   "intro": null,
-  "published": false,
-  "cover": null,
-  "photos": []
+  "published": true,
+  "cover": "aurora-7.jpg",
+  "photos": [
+    {
+      "file": "aurora-2.jpg"
+    },
+    {
+      "file": "aurora-5.jpg"
+    },
+    {
+      "file": "aurora-6.jpg"
+    },
+    {
+      "file": "aurora-7.jpg"
+    },
+    {
+      "file": "aurora-8.jpg"
+    },
+    {
+      "file": "aurora-9.jpg"
+    }
+  ]
 }
