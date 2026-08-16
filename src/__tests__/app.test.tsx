@@ -145,7 +145,7 @@ describe('Gallery', () => {
       expect(document.querySelector('.about')).toBeTruthy();
     });
 
-    expect(document.querySelectorAll('.about-contact li').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('.about-links a').length).toBeGreaterThan(0);
   });
 
   it('back navigation returns to home', async () => {

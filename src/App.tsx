@@ -68,7 +68,7 @@ export function App() {
         {state.status === 'ready' && (
           <>
             {route.view === 'home' && <Home archive={archive} onNavigate={navigate} />}
-            {route.view === 'about' && <About archive={archive} />}
+            {route.view === 'about' && <About />}
             {route.view === 'album' && album && (
               <AlbumView
                 album={album}

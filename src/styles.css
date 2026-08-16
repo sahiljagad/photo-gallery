@@ -456,134 +456,54 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── About ─────────────────────────────────────────────────────────── */
+/* ── About ────────────────────────────────────────────────────────── */
 
+/* A name, a line, two links. Nothing here competes with the photographs,
+   which are the reason anyone came. */
 .about {
-  max-width: var(--maxw);
+  max-width: var(--measure);
   margin: 0 auto;
-  padding: clamp(1.5rem, 4vw, 3rem) var(--gut) clamp(4rem, 8vw, 6rem);
-}
-
-.about-header {
+  padding: clamp(4rem, 14vh, 9rem) var(--gut) clamp(4rem, 8vw, 6rem);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding-bottom: clamp(2rem, 5vw, 3.5rem);
-  border-bottom: 1px solid var(--line);
+  gap: 1.1rem;
 }
 
 .about-title {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: clamp(2rem, 5vw, 3.4rem);
-  line-height: 1.06;
+  font-size: clamp(1.9rem, 4.5vw, 2.8rem);
+  line-height: 1.1;
   letter-spacing: -0.015em;
 }
 
-.about-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(2.5rem, 5vw, 4rem);
-  padding-top: clamp(2rem, 5vw, 3.5rem);
-}
-
-@media (min-width: 900px) {
-  .about-body {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
-    align-items: start;
-  }
-}
-
-.about-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-width: var(--measure);
-}
-
-.about-text p {
+.about-bio {
+  font-size: clamp(1.05rem, 1.8vw, 1.2rem);
+  line-height: 1.6;
   color: var(--fg-dim);
-  font-size: 1.05rem;
-  line-height: 1.75;
+  text-wrap: balance;
 }
 
-.about-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 2.5rem;
-  padding: 1.25rem 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.about-facts div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.about-facts dt {
-  font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--fg-faint);
-}
-
-.about-facts dd {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-
-.about-contact,
-.about-prints {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-}
-
-.about-contact ul {
+.about-links {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
+  margin-top: 1.25rem;
 }
 
-.about-contact li {
-  display: flex;
-  gap: 1rem;
-  align-items: baseline;
-}
-
-.contact-label {
+.about-links a {
   font-family: var(--font-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--fg-faint);
-  min-width: 6rem;
-}
-
-.about-contact a {
-  color: var(--accent);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  color: var(--fg-dim);
   border-bottom: 1px solid transparent;
-  transition: border-color var(--t);
+  transition: color var(--t), border-color var(--t);
 }
 
-.about-contact a:hover {
+.about-links a:hover {
+  color: var(--fg);
   border-bottom-color: var(--accent);
-}
-
-.about-figure {
-  overflow: hidden;
-  background: var(--bg-raised);
-}
-
-.about-figure img {
-  width: 100%;
-  height: auto;
 }
 
 /* ── Lightbox ──────────────────────────────────────────────────────── */
